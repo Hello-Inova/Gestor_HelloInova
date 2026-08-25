@@ -20,7 +20,12 @@
     booted: false,
     systemModal: null, // { mode: 'create'|'edit', system?: {...} }
     profileModal: false,
+    viewModal: null, // sistema sendo visualizado no pop-up de detalhes
+    systemsSearch: '',
+    systemsFilterCategories: [],
   };
+
+  const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS'];
 
   // ---------------- API helper ----------------
   async function api(path, opts) {
@@ -76,6 +81,7 @@
       upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>',
       image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
       user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+      search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
   }
@@ -91,6 +97,27 @@
     t.className = 'toast show' + (isError ? ' error' : '');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  function formatCurrencyBRL(value) {
+    if (value === null || value === undefined || value === '') return '';
+    const num = Number(value);
+    if (isNaN(num)) return '';
+    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  function formatDateBR(iso) {
+    if (!iso) return '';
+    const parts = String(iso).slice(0, 10).split('-');
+    if (parts.length !== 3) return iso;
+    return parts[2] + '/' + parts[1] + '/' + parts[0];
+  }
+
+  function normalizedUrl(url) {
+    let u = (url || '').trim();
+    if (!u) return '#';
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    return u;
   }
 
   function debounce(fn, ms) {
@@ -155,6 +182,7 @@
       $app.appendChild(renderAppShell());
       if (state.systemModal) $app.appendChild(buildSystemModal());
       if (state.profileModal) $app.appendChild(buildProfileModal());
+      if (state.viewModal) $app.appendChild(buildViewModal());
     }
   }
 
@@ -710,35 +738,130 @@
     const wrap = el('div', { class: 'canvas-scroll' });
     const inner = el('div', { class: 'sysmgr' });
 
-    const listCard = el('div', { class: 'sysmgr-card grow' }, [
-      el('div', { class: 'sysmgr-header-row' }, [
-        el('div', { class: 'htext' }, [
-          el('h3', {}, [el('span', { html: icon('server') }), ' Sistemas cadastrados']),
-          el('p', { class: 'sysmgr-sub' }, ['Reabra qualquer sistema já cadastrado com um clique.']),
-        ]),
+    const listCard = el('div', { class: 'sysmgr-card grow' });
+
+    listCard.appendChild(el('div', { class: 'sysmgr-header-row' }, [
+      el('div', { class: 'htext' }, [
+        el('h3', {}, [el('span', { html: icon('server') }), ' Sistemas cadastrados']),
+        el('p', { class: 'sysmgr-sub' }, ['Reabra qualquer sistema já cadastrado com um clique.']),
       ]),
-    ]);
+    ]));
+
+    // ---- Pesquisa ----
+    const searchInput = el('input', {
+      type: 'search',
+      class: 'sysmgr-search-input',
+      placeholder: 'Pesquisar por nome, link ou e-mail…',
+      value: state.systemsSearch || '',
+    });
+    searchInput.addEventListener('input', () => {
+      state.systemsSearch = searchInput.value;
+      refreshList();
+    });
+    listCard.appendChild(el('div', { class: 'sysmgr-search' }, [
+      el('span', { class: 'search-icon', html: icon('search') }),
+      searchInput,
+    ]));
+
+    // ---- Filtros por tipo de sistema ----
+    const filterBar = el('div', { class: 'sysmgr-filters' });
+    SYSTEM_CATEGORIES.forEach((cat) => {
+      const active = state.systemsFilterCategories.includes(cat);
+      const chip = el('button', { type: 'button', class: 'filter-chip' + (active ? ' active' : '') }, [cat]);
+      chip.addEventListener('click', () => {
+        const idx = state.systemsFilterCategories.indexOf(cat);
+        if (idx >= 0) state.systemsFilterCategories.splice(idx, 1);
+        else state.systemsFilterCategories.push(cat);
+        render();
+      });
+      filterBar.appendChild(chip);
+    });
+    if (state.systemsFilterCategories.length) {
+      const clearBtn = el('button', { type: 'button', class: 'filter-chip clear' }, ['Limpar filtros']);
+      clearBtn.addEventListener('click', () => { state.systemsFilterCategories = []; render(); });
+      filterBar.appendChild(clearBtn);
+    }
+    listCard.appendChild(filterBar);
 
     const listBody = el('div', { class: 'sysmgr-list' });
-    const systems = state.systems || [];
+    listCard.appendChild(listBody);
 
-    if (!systems.length) {
-      listBody.appendChild(el('div', { class: 'sysmgr-empty' }, [
-        'Nenhum sistema cadastrado ainda. Clique em "Novo Sistema", no topo da página, para adicionar o primeiro.',
-      ]));
-    } else {
-      systems.forEach((sys) => listBody.appendChild(buildSystemRow(sys)));
+    function applyFilters() {
+      const all = state.systems || [];
+      const term = (state.systemsSearch || '').trim().toLowerCase();
+      const cats = state.systemsFilterCategories;
+      return all.filter((sys) => {
+        if (term) {
+          const hay = [sys.name, sys.url, sys.login_email].filter(Boolean).join(' ').toLowerCase();
+          if (!hay.includes(term)) return false;
+        }
+        if (cats.length) {
+          const sysCats = sys.categories || [];
+          if (!cats.some((c) => sysCats.includes(c))) return false;
+        }
+        return true;
+      });
     }
 
-    listCard.appendChild(listBody);
+    function refreshList() {
+      listBody.innerHTML = '';
+      const all = state.systems || [];
+      const filtered = applyFilters();
+      if (!all.length) {
+        listBody.appendChild(el('div', { class: 'sysmgr-empty' }, [
+          'Nenhum sistema cadastrado ainda. Clique em "Novo Sistema", no topo da página, para adicionar o primeiro.',
+        ]));
+      } else if (!filtered.length) {
+        listBody.appendChild(el('div', { class: 'sysmgr-empty' }, [
+          'Nenhum sistema encontrado com a pesquisa/filtros atuais.',
+        ]));
+      } else {
+        filtered.forEach((sys) => listBody.appendChild(buildSystemRow(sys)));
+      }
+    }
+    refreshList();
+
     inner.appendChild(listCard);
     wrap.appendChild(inner);
     return wrap;
   }
 
   function buildSystemRow(sys) {
+    const categories = Array.isArray(sys.categories) ? sys.categories : [];
+
+    const badges = el('div', { class: 'sysmgr-row-badges' },
+      categories.length
+        ? categories.map((c) => el('span', { class: 'category-badge' }, [c]))
+        : [el('span', { class: 'category-badge muted' }, ['Sem categoria'])]
+    );
+
+    const iconEl = sys.logo
+      ? el('img', { src: sys.logo, alt: sys.name })
+      : (sys.name || '?').trim().charAt(0).toUpperCase();
+
+    const viewBtn = el('button', {
+      class: 'btn btn-ghost btn-icon', title: 'Visualizar sistema', type: 'button',
+      onclick: () => openViewModal(sys),
+      html: icon('eye'),
+    });
+
+    const detailsToggle = el('button', { class: 'btn btn-ghost btn-sm sysmgr-details-toggle', type: 'button' }, [
+      el('span', { class: 'chevron', html: icon('down') }),
+      el('span', { class: 'lbl' }, [' Detalhes']),
+    ]);
+
+    const detailsPanel = el('div', { class: 'sysmgr-row-details' });
+    let open = false;
+    detailsToggle.addEventListener('click', () => {
+      open = !open;
+      detailsPanel.classList.toggle('open', open);
+      detailsToggle.classList.toggle('active', open);
+      detailsToggle.querySelector('.chevron').innerHTML = icon(open ? 'up' : 'down');
+    });
+
+    // ---- Ações do sistema: ficam dentro dos detalhes ----
     const launchBtn = el('button', {
-      class: 'btn btn-primary btn-sm', title: 'Login As',
+      class: 'btn btn-primary btn-sm', title: 'Login As', type: 'button',
       onclick: async () => {
         launchBtn.disabled = true;
         try {
@@ -753,7 +876,7 @@
     }, [el('span', { html: icon('launch') }), el('span', { class: 'lbl' }, [' Login As'])]);
 
     const editBtn = el('button', {
-      class: 'btn btn-ghost btn-icon', title: 'Editar',
+      class: 'btn btn-ghost btn-icon', title: 'Editar', type: 'button',
       onclick: async () => {
         editBtn.disabled = true;
         try {
@@ -769,7 +892,7 @@
     });
 
     const deleteBtn = el('button', {
-      class: 'btn btn-danger btn-icon', title: 'Excluir',
+      class: 'btn btn-danger btn-icon', title: 'Excluir', type: 'button',
       onclick: async () => {
         if (!confirm('Excluir o sistema "' + sys.name + '"?')) return;
         try {
@@ -781,19 +904,89 @@
       html: icon('trash'),
     });
 
-    const iconEl = sys.logo
-      ? el('img', { src: sys.logo, alt: sys.name })
-      : (sys.name || '?').trim().charAt(0).toUpperCase();
+    const hasSubscription = !!(sys.subscription_name || sys.subscription_value != null || sys.subscription_due_date);
 
-    return el('div', { class: 'sysmgr-row' }, [
+    detailsPanel.appendChild(el('div', { class: 'sysmgr-detail-grid' }, [
+      el('div', { class: 'detail-item' }, [el('span', { class: 'dk' }, ['E-mail']), el('span', { class: 'dv' }, [sys.login_email || '—'])]),
+      el('div', { class: 'detail-item' }, [el('span', { class: 'dk' }, ['Assinatura']), el('span', { class: 'dv' }, [hasSubscription && sys.subscription_name ? sys.subscription_name : '—'])]),
+      el('div', { class: 'detail-item' }, [el('span', { class: 'dk' }, ['Valor']), el('span', { class: 'dv' }, [formatCurrencyBRL(sys.subscription_value) || '—'])]),
+      el('div', { class: 'detail-item' }, [el('span', { class: 'dk' }, ['Vencimento']), el('span', { class: 'dv' }, [formatDateBR(sys.subscription_due_date) || '—'])]),
+    ]));
+    detailsPanel.appendChild(el('div', { class: 'sysmgr-row-actions' }, [launchBtn, editBtn, deleteBtn]));
+
+    const mainRow = el('div', { class: 'sysmgr-row-main' }, [
       el('div', { class: 'sysmgr-row-icon' }, [iconEl]),
       el('div', { class: 'sysmgr-row-info' }, [
         el('div', { class: 'r-name' }, [sys.name]),
         el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [sys.url]),
-        el('div', { class: 'r-email' }, [sys.login_email || 'sem e-mail cadastrado']),
+        badges,
       ]),
-      el('div', { class: 'sysmgr-row-actions' }, [launchBtn, editBtn, deleteBtn]),
+      el('div', { class: 'sysmgr-row-main-actions' }, [viewBtn, detailsToggle]),
     ]);
+
+    return el('div', { class: 'sysmgr-row' }, [mainRow, detailsPanel]);
+  }
+
+  // ---------------- Modal: Visualizador do sistema ----------------
+  function openViewModal(sys) {
+    state.viewModal = sys;
+    render();
+  }
+  function closeViewModal() {
+    state.viewModal = null;
+    render();
+  }
+
+  function viewField(label, value) {
+    return el('div', { class: 'view-field' }, [
+      el('span', { class: 'vk' }, [label]),
+      el('span', { class: 'vv' }, [value]),
+    ]);
+  }
+
+  function buildViewModal() {
+    const sys = state.viewModal;
+    const categories = Array.isArray(sys.categories) ? sys.categories : [];
+
+    const body = el('div', { class: 'modal-body view-modal-body' }, [
+      el('div', { class: 'view-modal-top' }, [
+        el('div', { class: 'view-modal-logo' }, [
+          sys.logo ? el('img', { src: sys.logo, alt: sys.name }) : el('span', { html: icon('image') }),
+        ]),
+        el('div', {}, [
+          el('h4', { class: 'view-modal-name' }, [sys.name]),
+          el('a', { class: 'view-modal-url', href: normalizedUrl(sys.url), target: '_blank', rel: 'noopener' }, [sys.url]),
+          el('div', { class: 'sysmgr-row-badges' }, categories.length
+            ? categories.map((c) => el('span', { class: 'category-badge' }, [c]))
+            : [el('span', { class: 'category-badge muted' }, ['Sem categoria'])]),
+        ]),
+      ]),
+      el('div', { class: 'view-modal-grid' }, [
+        viewField('E-mail de acesso', sys.login_email || '—'),
+        viewField('Senha', sys.has_password ? '••••••••' : '—'),
+        viewField('Assinatura', sys.subscription_name || '—'),
+        viewField('Valor', formatCurrencyBRL(sys.subscription_value) || '—'),
+        viewField('Vencimento', formatDateBR(sys.subscription_due_date) || '—'),
+        viewField('Cadastrado em', sys.created_at ? formatDateBR(sys.created_at) : '—'),
+        viewField('Atualizado em', sys.updated_at ? formatDateBR(sys.updated_at) : '—'),
+      ]),
+    ]);
+
+    const card = el('div', { class: 'modal-card view-modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Detalhes do sistema']),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeViewModal, html: icon('close') }),
+      ]),
+      body,
+      el('div', { class: 'modal-footer' }, [
+        el('button', { class: 'btn btn-ghost', onclick: closeViewModal }, ['Fechar']),
+      ]),
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (ev) => { if (ev.target === ev.currentTarget) closeViewModal(); },
+    }, [card]);
   }
 
   // ---------------- Modal: Novo Sistema / Editar Sistema ----------------
@@ -818,6 +1011,21 @@
       type: 'password', placeholder: isEdit ? 'Deixe em branco para manter a atual' : '••••••••',
       autocomplete: 'new-password', value: sys.login_password || '',
     });
+
+    const existingCategories = Array.isArray(sys.categories) ? sys.categories : [];
+    const categorySelect = el('select', { multiple: true, class: 'category-select', size: String(SYSTEM_CATEGORIES.length) },
+      SYSTEM_CATEGORIES.map((cat) => el('option', {
+        value: cat,
+        selected: existingCategories.includes(cat) ? true : null,
+      }, [cat]))
+    );
+
+    const subscriptionNameInput = el('input', { type: 'text', placeholder: 'Ex: Plano mensal', value: sys.subscription_name || '' });
+    const subscriptionValueInput = el('input', {
+      type: 'number', step: '0.01', min: '0', placeholder: '0,00',
+      value: sys.subscription_value !== undefined && sys.subscription_value !== null ? sys.subscription_value : '',
+    });
+    const subscriptionDueInput = el('input', { type: 'date', value: sys.subscription_due_date || '' });
 
     const passToggle = el('button', {
       type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
@@ -867,13 +1075,27 @@
       const url = urlInput.value.trim();
       const email = emailInput.value.trim();
       const password = passInput.value;
+      const categories = Array.from(categorySelect.selectedOptions).map((o) => o.value);
+      const subscriptionName = subscriptionNameInput.value.trim();
+      const subscriptionValueRaw = subscriptionValueInput.value;
+      const subscriptionValue = subscriptionValueRaw === '' ? null : Number(subscriptionValueRaw);
+      const subscriptionDue = subscriptionDueInput.value || '';
 
       if (!name) { toast('Informe o nome do sistema.', true); return; }
       if (!url) { toast('Informe o link de acesso ao sistema.', true); return; }
+      if (subscriptionValueRaw !== '' && (isNaN(subscriptionValue) || subscriptionValue < 0)) {
+        toast('Informe um valor de assinatura válido.', true); return;
+      }
 
       primaryBtn.disabled = true;
       try {
-        const body = { name, url, login_email: email, logo: logoData };
+        const body = {
+          name, url, login_email: email, logo: logoData,
+          categories,
+          subscription_name: subscriptionName,
+          subscription_value: subscriptionValue,
+          subscription_due_date: subscriptionDue,
+        };
         if (password) body.login_password = password;
 
         if (isEdit) {
@@ -897,10 +1119,21 @@
     const body = el('div', { class: 'modal-body' }, [
       el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Tipo de sistema']),
+        categorySelect,
+        el('div', { class: 'field-hint' }, ['Segure Ctrl (ou Cmd no Mac) para selecionar mais de uma opção.']),
+      ]),
       el('div', { class: 'field' }, [el('label', {}, ['E-mail do sistema']), emailInput]),
       el('div', { class: 'field' }, [
         el('label', {}, ['Senha']),
         el('div', { class: 'password-field' }, [passInput, passToggle]),
+      ]),
+      el('div', { class: 'field-section-title' }, ['Assinatura']),
+      el('div', { class: 'field' }, [el('label', {}, ['Nome da assinatura / plano']), subscriptionNameInput]),
+      el('div', { class: 'sysmgr-grid' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Valor (R$)']), subscriptionValueInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Vencimento']), subscriptionDueInput]),
       ]),
       el('div', { class: 'field' }, [
         el('label', {}, ['Logo do sistema']),

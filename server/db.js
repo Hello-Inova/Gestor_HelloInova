@@ -74,6 +74,10 @@ const migrations = [
   "ALTER TABLE pages ADD COLUMN type TEXT NOT NULL DEFAULT 'canvas'",
   'ALTER TABLE users ADD COLUMN systems_seeded INTEGER NOT NULL DEFAULT 0',
   "ALTER TABLE systems ADD COLUMN logo TEXT DEFAULT ''",
+  "ALTER TABLE systems ADD COLUMN categories TEXT DEFAULT '[]'",
+  "ALTER TABLE systems ADD COLUMN subscription_name TEXT DEFAULT ''",
+  'ALTER TABLE systems ADD COLUMN subscription_value REAL',
+  "ALTER TABLE systems ADD COLUMN subscription_due_date TEXT DEFAULT ''",
 ];
 for (const sql of migrations) {
   try {
