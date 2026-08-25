@@ -1,0 +1,36 @@
+const path = require('node:path');
+const express = require('express');
+const cookieParser = require('cookie-parser');
+
+require('./db'); // garante criação do schema na inicialização
+
+const authRoutes = require('./routes/auth');
+const pageRoutes = require('./routes/pages');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(cookieParser());
+
+app.use('/api/auth', authRoutes);
+app.use('/api/pages', pageRoutes);
+
+// Frontend estático
+const CLIENT_DIR = path.join(__dirname, '..', 'client', 'public');
+app.use(express.static(CLIENT_DIR));
+
+// Qualquer rota não-API cai no SPA (index.html cuida do roteamento client-side)
+app.get(/^(?!\/api).*/, (req, res) => {
+  res.sendFile(path.join(CLIENT_DIR, 'index.html'));
+});
+
+// Handler de erro genérico
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Erro interno do servidor.' });
+});
+
+app.listen(PORT, () => {
+  console.log(`HelloInova Manager rodando em http://localhost:${PORT}`);
+});
