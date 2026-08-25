@@ -18,6 +18,8 @@
     authView: 'login', // 'login' | 'register'
     sidebarOpen: false,
     booted: false,
+    systemModal: null, // { mode: 'create'|'edit', system?: {...} }
+    profileModal: false,
   };
 
   // ---------------- API helper ----------------
@@ -69,6 +71,11 @@
       launch: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/>',
       server: '<rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01"/><path d="M6 17.5h.01"/>',
       info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+      eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
+      eyeOff: '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a17.4 17.4 0 0 1-3.35 4.5"/><path d="M6.1 6.1C3.5 7.9 1 12 1 12s4 8 11 8a9.4 9.4 0 0 0 4.9-1.4"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/>',
+      upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>',
+      image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
+      user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
   }
@@ -146,6 +153,8 @@
       $app.appendChild(renderAuthScreen());
     } else {
       $app.appendChild(renderAppShell());
+      if (state.systemModal) $app.appendChild(buildSystemModal());
+      if (state.profileModal) $app.appendChild(buildProfileModal());
     }
   }
 
@@ -310,10 +319,16 @@
     }
 
     const footer = el('div', { class: 'sidebar-footer' }, [
-      el('div', { class: 'user-avatar' }, [(state.user.name || '?').trim().charAt(0).toUpperCase()]),
-      el('div', { class: 'user-meta' }, [
-        el('div', { class: 'u-name' }, [state.user.name]),
-        el('div', { class: 'u-email' }, [state.user.email]),
+      el('button', {
+        class: 'profile-trigger',
+        title: 'Ver perfil',
+        onclick: () => { state.profileModal = true; render(); },
+      }, [
+        el('div', { class: 'user-avatar' }, [(state.user.name || '?').trim().charAt(0).toUpperCase()]),
+        el('div', { class: 'user-meta' }, [
+          el('div', { class: 'u-name' }, [state.user.name]),
+          el('div', { class: 'u-email' }, [state.user.email]),
+        ]),
       ]),
       el('button', {
         class: 'btn btn-ghost btn-icon',
@@ -408,12 +423,15 @@
             onclick: (ev) => { ev.stopPropagation(); nameInput.removeAttribute('readonly'); nameInput.classList.add('editing'); nameInput.focus(); nameInput.select(); },
             html: icon('edit'),
           }),
-          page.type === 'systems' ? null : el('button', {
+          el('button', {
             class: 'icon-btn danger', title: 'Excluir módulo',
             onclick: async (ev) => {
               ev.stopPropagation();
               if (state.pages.length <= 1) { toast('É necessário manter ao menos um módulo.', true); return; }
-              if (!confirm('Excluir o módulo "' + page.name + '"? Todos os elementos dele serão perdidos.')) return;
+              const warn = page.type === 'systems'
+                ? 'Excluir o módulo "' + page.name + '"? Os sistemas cadastrados nele continuam salvos, mas o módulo não volta sozinho — você pode recriar um novo módulo quando quiser.'
+                : 'Excluir o módulo "' + page.name + '"? Todos os elementos dele serão perdidos.';
+              if (!confirm(warn)) return;
               try {
                 await api('/pages/' + page.id, { method: 'DELETE' });
                 await loadPages();
@@ -626,7 +644,12 @@
       el('div', { class: 'page-title-wrap' }, [
         el('h2', {}, [page ? page.name : 'Nenhum módulo']),
       ]),
-      isSystems ? el('div', {}) : el('div', { class: 'toolbox' }, [
+      isSystems ? el('div', { class: 'toolbox' }, [
+        el('button', {
+          class: 'btn btn-primary btn-sm',
+          onclick: () => openSystemModal('create'),
+        }, [el('span', { html: icon('plus') }), ' Novo Sistema']),
+      ]) : el('div', { class: 'toolbox' }, [
         toolboxBtn('type', 'Texto', () => addElement('label')),
         toolboxBtn('input', 'Campo', () => addElement('input')),
         toolboxBtn('button', 'Botão', () => addElement('button')),
@@ -687,88 +710,27 @@
     const wrap = el('div', { class: 'canvas-scroll' });
     const inner = el('div', { class: 'sysmgr' });
 
-    // ---- Formulário de acesso rápido ----
-    const nameInput = el('input', { type: 'text', placeholder: 'Ex: Hello Conecta — ERP' });
-    const urlInput = el('input', { type: 'text', placeholder: 'https://sistema.helloinova.com.br' });
-    const emailInput = el('input', { type: 'text', placeholder: 'usuario@sistema.com', autocomplete: 'off' });
-    const passInput = el('input', { type: 'password', placeholder: '••••••••', autocomplete: 'new-password' });
-
-    const loginAsBtn = el('button', { class: 'btn btn-primary', type: 'button' }, [
-      el('span', { html: icon('launch') }), ' Login As',
-    ]);
-
-    loginAsBtn.addEventListener('click', async () => {
-      const name = nameInput.value.trim();
-      const url = urlInput.value.trim();
-      const email = emailInput.value.trim();
-      const password = passInput.value;
-
-      if (!name) { toast('Informe o nome do sistema.', true); return; }
-      if (!url) { toast('Informe o link de acesso ao sistema.', true); return; }
-
-      loginAsBtn.disabled = true;
-      try {
-        const existing = state.systems.find((s) => s.url === url);
-        let saved;
-        if (existing) {
-          const body = { name, url, login_email: email };
-          if (password) body.login_password = password;
-          const res = await api('/systems/' + existing.id, { method: 'PUT', body });
-          saved = res.system;
-          state.systems = state.systems.map((s) => (s.id === saved.id ? saved : s));
-        } else {
-          const res = await api('/systems', { method: 'POST', body: { name, url, login_email: email, login_password: password } });
-          saved = res.system;
-          state.systems = [saved, ...state.systems];
-        }
-        launchSystem(url, email, password);
-        nameInput.value = '';
-        urlInput.value = '';
-        emailInput.value = '';
-        passInput.value = '';
-        render();
-      } catch (err) {
-        toast(err.message, true);
-      } finally {
-        loginAsBtn.disabled = false;
-      }
-    });
-
-    const formCard = el('div', { class: 'sysmgr-card' }, [
-      el('h3', {}, [el('span', { html: icon('launch') }), ' Acesso rápido']),
-      el('p', { class: 'sysmgr-sub' }, ['Preencha os dados do sistema e clique em "Login As" para abrir e já cadastrar para os próximos acessos.']),
-      el('div', { class: 'sysmgr-grid' }, [
-        el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
-        el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
-        el('div', { class: 'field' }, [el('label', {}, ['E-mail do sistema']), emailInput]),
-        el('div', { class: 'field' }, [el('label', {}, ['Senha']), passInput]),
-      ]),
-      el('div', { class: 'sysmgr-actions' }, [loginAsBtn]),
-      el('div', { class: 'hint-box' }, [
-        el('span', { html: icon('info') }),
-        el('span', {}, [
-          'Por segurança dos navegadores, não é possível preencher automaticamente o formulário de login de outro site a partir daqui. O "Login As" abre o sistema em uma nova aba e copia a senha para você colar (Ctrl+V) — o e-mail aparece no aviso para copiar também.',
+    const listCard = el('div', { class: 'sysmgr-card grow' }, [
+      el('div', { class: 'sysmgr-header-row' }, [
+        el('div', { class: 'htext' }, [
+          el('h3', {}, [el('span', { html: icon('server') }), ' Sistemas cadastrados']),
+          el('p', { class: 'sysmgr-sub' }, ['Reabra qualquer sistema já cadastrado com um clique.']),
         ]),
       ]),
-    ]);
-
-    // ---- Lista de sistemas cadastrados ----
-    const listCard = el('div', { class: 'sysmgr-card' }, [
-      el('h3', {}, [el('span', { html: icon('server') }), ' Sistemas cadastrados']),
-      el('p', { class: 'sysmgr-sub' }, ['Reabra qualquer sistema já cadastrado com um clique.']),
     ]);
 
     const listBody = el('div', { class: 'sysmgr-list' });
     const systems = state.systems || [];
 
     if (!systems.length) {
-      listBody.appendChild(el('div', { class: 'sysmgr-empty' }, ['Nenhum sistema cadastrado ainda. Use o formulário acima para adicionar o primeiro.']));
+      listBody.appendChild(el('div', { class: 'sysmgr-empty' }, [
+        'Nenhum sistema cadastrado ainda. Clique em "Novo Sistema", no topo da página, para adicionar o primeiro.',
+      ]));
     } else {
       systems.forEach((sys) => listBody.appendChild(buildSystemRow(sys)));
     }
 
     listCard.appendChild(listBody);
-    inner.appendChild(formCard);
     inner.appendChild(listCard);
     wrap.appendChild(inner);
     return wrap;
@@ -792,7 +754,17 @@
 
     const editBtn = el('button', {
       class: 'btn btn-ghost btn-icon', title: 'Editar',
-      onclick: () => openEditSystemPrompt(sys),
+      onclick: async () => {
+        editBtn.disabled = true;
+        try {
+          const reveal = await api('/systems/' + sys.id + '/reveal');
+          openSystemModal('edit', { ...sys, login_password: reveal.login_password });
+        } catch (err) {
+          toast(err.message, true);
+        } finally {
+          editBtn.disabled = false;
+        }
+      },
       html: icon('edit'),
     });
 
@@ -809,8 +781,12 @@
       html: icon('trash'),
     });
 
+    const iconEl = sys.logo
+      ? el('img', { src: sys.logo, alt: sys.name })
+      : (sys.name || '?').trim().charAt(0).toUpperCase();
+
     return el('div', { class: 'sysmgr-row' }, [
-      el('div', { class: 'sysmgr-row-icon' }, [(sys.name || '?').trim().charAt(0).toUpperCase()]),
+      el('div', { class: 'sysmgr-row-icon' }, [iconEl]),
       el('div', { class: 'sysmgr-row-info' }, [
         el('div', { class: 'r-name' }, [sys.name]),
         el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [sys.url]),
@@ -820,24 +796,217 @@
     ]);
   }
 
-  async function openEditSystemPrompt(sys) {
-    const name = prompt('Nome do sistema:', sys.name);
-    if (name === null) return;
-    const url = prompt('Link de acesso:', sys.url);
-    if (url === null) return;
-    const email = prompt('E-mail do sistema:', sys.login_email || '');
-    if (email === null) return;
-    const password = prompt('Nova senha (deixe em branco para manter a atual):', '');
-    if (password === null) return;
+  // ---------------- Modal: Novo Sistema / Editar Sistema ----------------
+  function openSystemModal(mode, system) {
+    state.systemModal = { mode, system: system || null };
+    render();
+  }
+  function closeSystemModal() {
+    state.systemModal = null;
+    render();
+  }
 
-    try {
-      const body = { name: name.trim() || sys.name, url: url.trim() || sys.url, login_email: email.trim() };
-      if (password) body.login_password = password;
-      const { system } = await api('/systems/' + sys.id, { method: 'PUT', body });
-      state.systems = state.systems.map((s) => (s.id === system.id ? system : s));
-      render();
-      toast('Sistema atualizado.');
-    } catch (err) { toast(err.message, true); }
+  function buildSystemModal() {
+    const cfg = state.systemModal;
+    const isEdit = cfg.mode === 'edit';
+    const sys = cfg.system || {};
+
+    const nameInput = el('input', { type: 'text', placeholder: 'Ex: Hello Conecta — ERP', value: sys.name || '' });
+    const urlInput = el('input', { type: 'text', placeholder: 'https://sistema.helloinova.com.br', value: sys.url || '' });
+    const emailInput = el('input', { type: 'text', placeholder: 'usuario@sistema.com', autocomplete: 'off', value: sys.login_email || '' });
+    const passInput = el('input', {
+      type: 'password', placeholder: isEdit ? 'Deixe em branco para manter a atual' : '••••••••',
+      autocomplete: 'new-password', value: sys.login_password || '',
+    });
+
+    const passToggle = el('button', {
+      type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
+      html: icon('eye'),
+      onclick: () => {
+        const showing = passInput.type === 'text';
+        passInput.type = showing ? 'password' : 'text';
+        passToggle.innerHTML = icon(showing ? 'eye' : 'eyeOff');
+      },
+    });
+
+    let logoData = sys.logo || '';
+    const logoPreview = el('div', { class: 'logo-preview' }, [
+      logoData ? el('img', { src: logoData, alt: 'logo' }) : el('span', { html: icon('image') }),
+    ]);
+    const logoFileInput = el('input', { type: 'file', accept: 'image/*' });
+    logoFileInput.addEventListener('change', () => {
+      const file = logoFileInput.files && logoFileInput.files[0];
+      if (!file) return;
+      if (file.size > 1_200_000) {
+        toast('Imagem muito grande. Escolha um arquivo de até ~1MB.', true);
+        logoFileInput.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        logoData = String(reader.result);
+        logoPreview.innerHTML = '';
+        logoPreview.appendChild(el('img', { src: logoData, alt: 'logo' }));
+      };
+      reader.readAsDataURL(file);
+    });
+    const logoPickBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => logoFileInput.click() }, [
+      el('span', { html: icon('upload') }), ' Anexar logo',
+    ]);
+    const logoRemoveBtn = el('button', {
+      class: 'btn btn-ghost btn-sm', type: 'button',
+      onclick: () => { logoData = ''; logoPreview.innerHTML = ''; logoPreview.appendChild(el('span', { html: icon('image') })); logoFileInput.value = ''; },
+    }, ['Remover']);
+
+    const primaryBtn = el('button', { class: 'btn btn-primary', type: 'button' }, [
+      isEdit ? 'Salvar alterações' : el('span', {}, [el('span', { html: icon('launch') }), ' Login As']),
+    ]);
+
+    primaryBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      const url = urlInput.value.trim();
+      const email = emailInput.value.trim();
+      const password = passInput.value;
+
+      if (!name) { toast('Informe o nome do sistema.', true); return; }
+      if (!url) { toast('Informe o link de acesso ao sistema.', true); return; }
+
+      primaryBtn.disabled = true;
+      try {
+        const body = { name, url, login_email: email, logo: logoData };
+        if (password) body.login_password = password;
+
+        if (isEdit) {
+          const res = await api('/systems/' + sys.id, { method: 'PUT', body });
+          state.systems = state.systems.map((s) => (s.id === res.system.id ? res.system : s));
+          closeSystemModal();
+          toast('Sistema atualizado.');
+        } else {
+          body.login_password = password;
+          const res = await api('/systems', { method: 'POST', body });
+          state.systems = [res.system, ...state.systems];
+          closeSystemModal();
+          launchSystem(url, email, password);
+        }
+      } catch (err) {
+        toast(err.message, true);
+        primaryBtn.disabled = false;
+      }
+    });
+
+    const body = el('div', { class: 'modal-body' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['E-mail do sistema']), emailInput]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Senha']),
+        el('div', { class: 'password-field' }, [passInput, passToggle]),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Logo do sistema']),
+        el('div', { class: 'logo-upload' }, [
+          logoPreview,
+          el('div', { class: 'logo-upload-actions' }, [logoFileInput, logoPickBtn, logoRemoveBtn]),
+        ]),
+      ]),
+      !isEdit ? el('div', { class: 'hint-box' }, [
+        el('span', { html: icon('info') }),
+        el('span', {}, [
+          'Por segurança dos navegadores, não é possível preencher automaticamente o formulário de login de outro site a partir daqui. O "Login As" salva o sistema, abre-o em uma nova aba e copia a senha para você colar (Ctrl+V) — o e-mail aparece no aviso para copiar também.',
+        ]),
+      ]) : null,
+    ]);
+
+    const card = el('div', { class: 'modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, [isEdit ? 'Editar sistema' : 'Novo Sistema']),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeSystemModal, html: icon('close') }),
+      ]),
+      body,
+      el('div', { class: 'modal-footer' }, [
+        el('button', { class: 'btn btn-ghost', onclick: closeSystemModal }, ['Cancelar']),
+        primaryBtn,
+      ]),
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (ev) => { if (ev.target === ev.currentTarget) closeSystemModal(); },
+    }, [card]);
+  }
+
+  // ---------------- Modal: Perfil do usuário ----------------
+  function buildProfileModal() {
+    const nameInput = el('input', { type: 'text', value: state.user.name || '' });
+    const emailInput = el('input', { type: 'email', value: state.user.email || '' });
+    const passInput = el('input', { type: 'password', placeholder: 'Deixe em branco para manter a atual', autocomplete: 'new-password' });
+    const passConfirm = el('input', { type: 'password', placeholder: 'Confirme a nova senha', autocomplete: 'new-password' });
+
+    const passToggle = el('button', {
+      type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
+      html: icon('eye'),
+      onclick: () => {
+        const showing = passInput.type === 'text';
+        passInput.type = passConfirm.type = showing ? 'password' : 'text';
+        passToggle.innerHTML = icon(showing ? 'eye' : 'eyeOff');
+      },
+    });
+
+    const saveBtn = el('button', { class: 'btn btn-primary', type: 'button' }, ['Salvar alterações']);
+    saveBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      const email = emailInput.value.trim();
+      const password = passInput.value;
+      const confirm2 = passConfirm.value;
+
+      if (!name) { toast('Informe seu nome.', true); return; }
+      if (!email) { toast('Informe seu e-mail.', true); return; }
+      if (password && password !== confirm2) { toast('As senhas não coincidem.', true); return; }
+
+      saveBtn.disabled = true;
+      try {
+        const body = { name, email };
+        if (password) body.password = password;
+        const res = await api('/auth/me', { method: 'PUT', body });
+        state.user = res.user;
+        state.profileModal = false;
+        render();
+        toast('Perfil atualizado.');
+      } catch (err) {
+        toast(err.message, true);
+        saveBtn.disabled = false;
+      }
+    });
+
+    const closeModal = () => { state.profileModal = false; render(); };
+
+    const body = el('div', { class: 'modal-body' }, [
+      el('div', { class: 'profile-avatar-lg' }, [(state.user.name || '?').trim().charAt(0).toUpperCase()]),
+      el('div', { class: 'field' }, [el('label', {}, ['Nome']), nameInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['E-mail']), emailInput]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Nova senha']),
+        el('div', { class: 'password-field' }, [passInput, passToggle]),
+      ]),
+      el('div', { class: 'field' }, [el('label', {}, ['Confirmar nova senha']), passConfirm]),
+    ]);
+
+    const card = el('div', { class: 'modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Meu perfil']),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeModal, html: icon('close') }),
+      ]),
+      body,
+      el('div', { class: 'modal-footer' }, [
+        el('button', { class: 'btn btn-ghost', onclick: closeModal }, ['Cancelar']),
+        saveBtn,
+      ]),
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (ev) => { if (ev.target === ev.currentTarget) closeModal(); },
+    }, [card]);
   }
 
   function toolboxBtn(iconName, label, onClick) {

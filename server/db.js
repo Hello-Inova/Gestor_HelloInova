@@ -19,6 +19,7 @@ db.exec(`
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'admin',
+    systems_seeded INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -60,17 +61,38 @@ db.exec(`
     url TEXT NOT NULL,
     login_email TEXT DEFAULT '',
     login_password_enc TEXT DEFAULT '',
+    logo TEXT DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 `);
 
-// Migração leve: adiciona a coluna "type" em bancos criados antes dessa versão.
+// Migrações leves: adicionam colunas em bancos criados antes dessa versão.
+// (SQLite não tem "ADD COLUMN IF NOT EXISTS", então tentamos e ignoramos o erro se já existir.)
+const migrations = [
+  "ALTER TABLE pages ADD COLUMN type TEXT NOT NULL DEFAULT 'canvas'",
+  'ALTER TABLE users ADD COLUMN systems_seeded INTEGER NOT NULL DEFAULT 0',
+  "ALTER TABLE systems ADD COLUMN logo TEXT DEFAULT ''",
+];
+for (const sql of migrations) {
+  try {
+    db.exec(sql);
+  } catch (e) {
+    // coluna já existe — ignora
+  }
+}
+
+// Contas que já tinham algum módulo do tipo "systems" antes da flag existir
+// são marcadas como já semeadas, para não duplicar o módulo.
 try {
-  db.exec("ALTER TABLE pages ADD COLUMN type TEXT NOT NULL DEFAULT 'canvas'");
+  db.exec(`
+    UPDATE users SET systems_seeded = 1
+    WHERE systems_seeded = 0
+      AND id IN (SELECT DISTINCT user_id FROM pages WHERE type = 'systems')
+  `);
 } catch (e) {
-  // coluna já existe — ignora
+  // ignora se as tabelas ainda não existirem na primeira execução
 }
 
 module.exports = db;

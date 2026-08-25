@@ -429,6 +429,19 @@ button { font-family: inherit; }
 .user-meta .u-name { font-size: 13px; font-weight: 600; color: var(--text-0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-meta .u-email { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.profile-trigger {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+  background: none; border: none; padding: 4px; margin: -4px; border-radius: 8px; cursor: pointer; text-align: left;
+}
+.profile-trigger:hover { background: rgba(255,255,255,0.06); }
+
+.profile-avatar-lg {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue-700), var(--blue-400));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 24px; color: #fff; flex-shrink: 0; margin: 0 auto 14px;
+}
+
 /* ---------- Área principal ---------- */
 .main {
   flex: 1;
@@ -472,17 +485,15 @@ button { font-family: inherit; }
 .canvas-scroll {
   flex: 1;
   overflow: auto;
-  padding: 28px;
+  padding: 20px;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
 }
 
 .canvas {
   position: relative;
   width: 100%;
-  max-width: 1180px;
-  min-height: 640px;
+  flex: 1;
+  min-height: 100%;
   background:
     radial-gradient(circle at 12% 8%, rgba(47, 123, 255, 0.08), transparent 40%),
     var(--bg-1);
@@ -567,12 +578,27 @@ button { font-family: inherit; }
    ============================================================ */
 .sysmgr {
   width: 100%;
-  max-width: 900px;
+  max-width: 1600px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  flex: 1;
+  min-height: 100%;
 }
+
+.sysmgr-card.grow { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sysmgr-card.grow .sysmgr-list { flex: 1; min-height: 0; align-content: start; overflow-y: auto; }
+
+.sysmgr-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.sysmgr-header-row .htext h3 { margin-bottom: 4px; }
+.sysmgr-header-row .htext .sysmgr-sub { margin-bottom: 0; }
 
 .sysmgr-card {
   background: linear-gradient(180deg, var(--panel), var(--bg-1));
@@ -602,7 +628,12 @@ button { font-family: inherit; }
 
 .sysmgr-actions { margin-top: 18px; display: flex; justify-content: flex-end; }
 
-.sysmgr-list { display: flex; flex-direction: column; gap: 10px; }
+.sysmgr-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
 
 .sysmgr-empty { color: var(--text-2); font-size: 13px; text-align: center; padding: 28px 10px; }
 
@@ -619,12 +650,14 @@ button { font-family: inherit; }
   width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
   background: linear-gradient(135deg, var(--blue-700), var(--blue-400));
   display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 15px;
+  overflow: hidden;
 }
+.sysmgr-row-icon img { width: 100%; height: 100%; object-fit: cover; }
 .sysmgr-row-info { flex: 1; min-width: 0; }
 .sysmgr-row-info .r-name { font-size: 14px; font-weight: 600; color: var(--text-0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sysmgr-row-info .r-url { font-size: 12px; color: var(--blue-400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; text-decoration: none; }
 .sysmgr-row-info .r-email { font-size: 11.5px; color: var(--text-2); }
-.sysmgr-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.sysmgr-row-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
 
 .hint-box {
   display: flex;
@@ -644,6 +677,81 @@ button { font-family: inherit; }
 @media (max-width: 640px) {
   .sysmgr-grid { grid-template-columns: 1fr; }
   .sysmgr-row { flex-wrap: wrap; }
+}
+
+/* ============================================================
+   Modal (Novo Sistema / Editar Sistema / Perfil)
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 6, 12, 0.72);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, var(--panel), var(--bg-1));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 40px 90px -20px rgba(0, 0, 0, 0.7);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 { font-family: var(--font-display); font-size: 16px; font-weight: 700; margin: 0; }
+
+.modal-body { padding: 20px 22px; }
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.password-field { position: relative; }
+.password-field input { padding-right: 40px; width: 100%; }
+.password-toggle {
+  position: absolute;
+  right: 6px; top: 50%; transform: translateY(-50%);
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--text-2); cursor: pointer;
+  border-radius: 6px;
+}
+.password-toggle:hover { color: var(--text-0); background: rgba(255,255,255,0.06); }
+
+.logo-upload {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.logo-preview {
+  width: 56px; height: 56px; border-radius: 12px; flex-shrink: 0;
+  background: var(--bg-0); border: 1px dashed var(--border-strong);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; color: var(--text-2);
+}
+.logo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.logo-upload-actions { display: flex; flex-direction: column; gap: 6px; }
+.logo-upload-actions input[type="file"] { display: none; }
+
+@media (max-width: 560px) {
+  .modal-card { max-width: 100%; }
 }
 
 /* ============================================================

@@ -9,13 +9,12 @@ function getOwnedPage(pageId, userId) {
   return db.prepare('SELECT * FROM pages WHERE id = ? AND user_id = ?').get(pageId, userId);
 }
 
-// Garante que todo usuário tenha o módulo especial "Gestor de Sistemas".
-// Cobre contas criadas antes deste módulo existir (auto-cura, roda a cada listagem).
+// Garante que todo usuário ganhe o módulo especial "Gestor de Sistemas" uma
+// única vez (na primeira listagem após o cadastro/migração). Usa a flag
+// systems_seeded para não recriar o módulo caso o usuário o exclua de propósito.
 function ensureSystemsModule(userId) {
-  const hasSystemsModule = db
-    .prepare("SELECT id FROM pages WHERE user_id = ? AND type = 'systems'")
-    .get(userId);
-  if (hasSystemsModule) return;
+  const user = db.prepare('SELECT systems_seeded FROM users WHERE id = ?').get(userId);
+  if (!user || user.systems_seeded) return;
 
   // Se já existe um módulo comum com esse mesmo nome (de antes desta atualização),
   // renomeia para não confundir com o novo módulo especial.
@@ -30,6 +29,7 @@ function ensureSystemsModule(userId) {
   db.prepare("INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Gestor de Sistemas', 'systems', 0)").run(
     userId
   );
+  db.prepare('UPDATE users SET systems_seeded = 1 WHERE id = ?').run(userId);
 }
 
 // Lista módulos do usuário, com seus elementos
@@ -80,10 +80,6 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   const page = getOwnedPage(req.params.id, req.user.id);
   if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
-
-  if (page.type === 'systems') {
-    return res.status(400).json({ error: 'O módulo "Gestor de Sistemas" não pode ser excluído.' });
-  }
 
   const total = db.prepare('SELECT COUNT(*) as c FROM pages WHERE user_id = ?').get(req.user.id).c;
   if (total <= 1) return res.status(400).json({ error: 'É necessário manter ao menos um módulo.' });

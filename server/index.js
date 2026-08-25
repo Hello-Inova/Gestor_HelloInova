@@ -11,7 +11,7 @@ const systemRoutes = require('./routes/systems');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '3mb' })); // permite anexar a logo do sistema (base64) no Gestor de Sistemas
 app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
@@ -30,6 +30,9 @@ app.get(/^(?!\/api).*/, (req, res) => {
 // Handler de erro genérico
 app.use((err, req, res, next) => {
   console.error(err);
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({ error: 'Arquivo muito grande. Envie uma imagem menor (até ~1MB).' });
+  }
   res.status(500).json({ error: 'Erro interno do servidor.' });
 });
 
