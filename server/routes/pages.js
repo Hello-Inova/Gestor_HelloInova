@@ -9,8 +9,33 @@ function getOwnedPage(pageId, userId) {
   return db.prepare('SELECT * FROM pages WHERE id = ? AND user_id = ?').get(pageId, userId);
 }
 
+// Garante que todo usuário tenha o módulo especial "Gestor de Sistemas".
+// Cobre contas criadas antes deste módulo existir (auto-cura, roda a cada listagem).
+function ensureSystemsModule(userId) {
+  const hasSystemsModule = db
+    .prepare("SELECT id FROM pages WHERE user_id = ? AND type = 'systems'")
+    .get(userId);
+  if (hasSystemsModule) return;
+
+  // Se já existe um módulo comum com esse mesmo nome (de antes desta atualização),
+  // renomeia para não confundir com o novo módulo especial.
+  const clash = db
+    .prepare("SELECT id, name FROM pages WHERE user_id = ? AND type != 'systems' AND lower(name) = 'gestor de sistemas'")
+    .get(userId);
+  if (clash) {
+    db.prepare('UPDATE pages SET name = ? WHERE id = ?').run(clash.name + ' (antigo)', clash.id);
+  }
+
+  db.prepare('UPDATE pages SET order_index = order_index + 1 WHERE user_id = ?').run(userId);
+  db.prepare("INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Gestor de Sistemas', 'systems', 0)").run(
+    userId
+  );
+}
+
 // Lista módulos do usuário, com seus elementos
 router.get('/', (req, res) => {
+  ensureSystemsModule(req.user.id);
+
   const pages = db
     .prepare('SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC')
     .all(req.user.id);
