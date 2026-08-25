@@ -87,6 +87,8 @@ const migrations = [
   "ALTER TABLE systems ADD COLUMN subscription_name TEXT DEFAULT ''",
   'ALTER TABLE systems ADD COLUMN subscription_value REAL',
   "ALTER TABLE systems ADD COLUMN subscription_due_date TEXT DEFAULT ''",
+  "ALTER TABLE systems ADD COLUMN subscriptions TEXT DEFAULT '[]'",
+  "ALTER TABLE systems ADD COLUMN repo_url TEXT DEFAULT ''",
 ];
 for (const sql of migrations) {
   try {
@@ -94,6 +96,29 @@ for (const sql of migrations) {
   } catch (e) {
     // coluna já existe — ignora
   }
+}
+
+// Migra a antiga assinatura única (subscription_name/value/due_date) para a
+// nova lista de assinaturas (coluna "subscriptions", suporta várias por
+// sistema), preservando o que já existia.
+try {
+  const legacyRows = db
+    .prepare(
+      `SELECT id, subscription_name, subscription_value, subscription_due_date FROM systems
+       WHERE (subscriptions IS NULL OR subscriptions = '[]')
+         AND (COALESCE(subscription_name, '') != '' OR subscription_value IS NOT NULL OR COALESCE(subscription_due_date, '') != '')`
+    )
+    .all();
+  for (const r of legacyRows) {
+    const item = {
+      name: r.subscription_name || '',
+      value: r.subscription_value === undefined ? null : r.subscription_value,
+      due_date: r.subscription_due_date || '',
+    };
+    db.prepare('UPDATE systems SET subscriptions = ? WHERE id = ?').run(JSON.stringify([item]), r.id);
+  }
+} catch (e) {
+  // ignora se a tabela ainda não existir na primeira execução
 }
 
 // Contas que já tinham algum módulo do tipo "systems" antes da flag existir

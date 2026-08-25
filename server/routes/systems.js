@@ -18,17 +18,32 @@ function toPublic(row) {
     if (Array.isArray(parsed)) categories = parsed.filter((c) => SYSTEM_CATEGORIES.includes(c));
   } catch (e) { /* categorias inválidas — trata como vazio */ }
 
+  let subscriptions = [];
+  try {
+    const parsed = JSON.parse(row.subscriptions || '[]');
+    if (Array.isArray(parsed)) {
+      subscriptions = parsed.map((s) => ({
+        name: typeof s.name === 'string' ? s.name : '',
+        value: typeof s.value === 'number' ? s.value : (s.value === null || s.value === undefined ? null : Number(s.value)),
+        due_date: typeof s.due_date === 'string' ? s.due_date : '',
+      }));
+    }
+  } catch (e) { /* assinaturas inválidas — trata como vazio */ }
+
+  const subscriptionsTotalValue = subscriptions.reduce((sum, s) => sum + (typeof s.value === 'number' && !isNaN(s.value) ? s.value : 0), 0);
+
   return {
     id: row.id,
     name: row.name,
     url: row.url,
+    repo_url: row.repo_url || '',
     login_email: row.login_email,
     has_password: !!row.login_password_enc,
     logo: row.logo || '',
     categories,
-    subscription_name: row.subscription_name || '',
-    subscription_value: row.subscription_value === undefined ? null : row.subscription_value,
-    subscription_due_date: row.subscription_due_date || '',
+    subscriptions,
+    subscriptions_total_count: subscriptions.length,
+    subscriptions_total_value: subscriptionsTotalValue,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -57,20 +72,40 @@ function parseCategories(input) {
   return { ok: true, categories: unique };
 }
 
-// Normaliza e valida o valor monetário da assinatura (aceita null/undefined para "sem valor").
-function parseSubscriptionValue(input) {
-  if (input === undefined) return { ok: true, value: undefined };
-  if (input === null || input === '') return { ok: true, value: null };
-  const num = Number(input);
-  if (!Number.isFinite(num) || num < 0) return { ok: false, error: 'Informe um valor de assinatura válido.' };
-  return { ok: true, value: num };
-}
+// Normaliza e valida a lista de assinaturas vinda do cliente.
+// Cada item: { name, value, due_date }. Retorna { ok, subscriptions, error }.
+function parseSubscriptions(input) {
+  if (input === undefined) return { ok: true, subscriptions: undefined };
+  if (!Array.isArray(input)) return { ok: false, error: 'Lista de assinaturas inválida.' };
+  if (input.length > 200) return { ok: false, error: 'Número de assinaturas excede o limite permitido.' };
 
-function parseSubscriptionDate(input) {
-  if (input === undefined) return { ok: true, date: undefined };
-  if (input === null || input === '') return { ok: true, date: '' };
-  if (typeof input !== 'string' || !DATE_RE.test(input)) return { ok: false, error: 'Informe uma data de vencimento válida.' };
-  return { ok: true, date: input };
+  const subscriptions = [];
+  for (const item of input) {
+    if (!item || typeof item !== 'object') return { ok: false, error: 'Assinatura inválida.' };
+
+    const name = typeof item.name === 'string' ? item.name.trim() : '';
+
+    let value = null;
+    if (item.value !== undefined && item.value !== null && item.value !== '') {
+      const num = Number(item.value);
+      if (!Number.isFinite(num) || num < 0) return { ok: false, error: 'Informe um valor de assinatura válido.' };
+      value = num;
+    }
+
+    let due_date = '';
+    if (item.due_date) {
+      if (typeof item.due_date !== 'string' || !DATE_RE.test(item.due_date)) {
+        return { ok: false, error: 'Informe uma data de vencimento válida.' };
+      }
+      due_date = item.due_date;
+    }
+
+    // Ignora linhas totalmente vazias (ex: uma linha adicionada e não preenchida).
+    if (!name && value === null && !due_date) continue;
+
+    subscriptions.push({ name, value, due_date });
+  }
+  return { ok: true, subscriptions };
 }
 
 // Lista as categorias/tipos de sistema disponíveis para o select do cadastro
@@ -89,8 +124,8 @@ router.get('/', (req, res) => {
 // Cadastra um novo sistema
 router.post('/', (req, res) => {
   const {
-    name, url, login_email = '', login_password = '', logo = '',
-    categories, subscription_name = '', subscription_value, subscription_due_date,
+    name, url, repo_url = '', login_email = '', login_password = '', logo = '',
+    categories, subscriptions,
   } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
   if (!url || !url.trim()) return res.status(400).json({ error: 'Informe o link de acesso.' });
@@ -98,21 +133,18 @@ router.post('/', (req, res) => {
 
   const cat = parseCategories(categories);
   if (!cat.ok) return res.status(400).json({ error: cat.error });
-  const subVal = parseSubscriptionValue(subscription_value);
-  if (!subVal.ok) return res.status(400).json({ error: subVal.error });
-  const subDate = parseSubscriptionDate(subscription_due_date);
-  if (!subDate.ok) return res.status(400).json({ error: subDate.error });
+  const subs = parseSubscriptions(subscriptions);
+  if (!subs.ok) return res.status(400).json({ error: subs.error });
 
   const info = db
     .prepare(
       `INSERT INTO systems
-        (user_id, name, url, login_email, login_password_enc, logo, categories, subscription_name, subscription_value, subscription_due_date)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
+        (user_id, name, url, repo_url, login_email, login_password_enc, logo, categories, subscriptions)
+       VALUES (?,?,?,?,?,?,?,?,?)`
     )
     .run(
-      req.user.id, name.trim(), url.trim(), login_email.trim(), encrypt(login_password), logo,
-      JSON.stringify(cat.categories || []), (subscription_name || '').trim(),
-      subVal.value === undefined ? null : subVal.value, subDate.date === undefined ? '' : subDate.date
+      req.user.id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
+      JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || [])
     );
 
   const row = db.prepare('SELECT * FROM systems WHERE id = ?').get(info.lastInsertRowid);
@@ -125,35 +157,32 @@ router.put('/:id', (req, res) => {
   if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
 
   const {
-    name, url, login_email, login_password, logo,
-    categories, subscription_name, subscription_value, subscription_due_date,
+    name, url, repo_url, login_email, login_password, logo,
+    categories, subscriptions,
   } = req.body || {};
   if (logo !== undefined && !validLogo(logo)) {
     return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
   }
   const cat = parseCategories(categories);
   if (!cat.ok) return res.status(400).json({ error: cat.error });
-  const subVal = parseSubscriptionValue(subscription_value);
-  if (!subVal.ok) return res.status(400).json({ error: subVal.error });
-  const subDate = parseSubscriptionDate(subscription_due_date);
-  if (!subDate.ok) return res.status(400).json({ error: subDate.error });
+  const subs = parseSubscriptions(subscriptions);
+  if (!subs.ok) return res.status(400).json({ error: subs.error });
 
   const newName = typeof name === 'string' && name.trim() ? name.trim() : row.name;
   const newUrl = typeof url === 'string' && url.trim() ? url.trim() : row.url;
+  const newRepoUrl = typeof repo_url === 'string' ? repo_url.trim() : row.repo_url;
   const newEmail = typeof login_email === 'string' ? login_email.trim() : row.login_email;
   const newPassEnc =
     typeof login_password === 'string' && login_password !== '' ? encrypt(login_password) : row.login_password_enc;
   const newLogo = typeof logo === 'string' ? logo : row.logo;
   const newCategories = cat.categories === undefined ? row.categories : JSON.stringify(cat.categories);
-  const newSubName = typeof subscription_name === 'string' ? subscription_name.trim() : row.subscription_name;
-  const newSubValue = subVal.value === undefined ? row.subscription_value : subVal.value;
-  const newSubDate = subDate.date === undefined ? row.subscription_due_date : subDate.date;
+  const newSubscriptions = subs.subscriptions === undefined ? row.subscriptions : JSON.stringify(subs.subscriptions);
 
   db.prepare(
-    `UPDATE systems SET name=?, url=?, login_email=?, login_password_enc=?, logo=?,
-       categories=?, subscription_name=?, subscription_value=?, subscription_due_date=?,
+    `UPDATE systems SET name=?, url=?, repo_url=?, login_email=?, login_password_enc=?, logo=?,
+       categories=?, subscriptions=?,
        updated_at=datetime('now') WHERE id=?`
-  ).run(newName, newUrl, newEmail, newPassEnc, newLogo, newCategories, newSubName, newSubValue, newSubDate, row.id);
+  ).run(newName, newUrl, newRepoUrl, newEmail, newPassEnc, newLogo, newCategories, newSubscriptions, row.id);
 
   const updated = db.prepare('SELECT * FROM systems WHERE id = ?').get(row.id);
   res.json({ system: toPublic(updated) });

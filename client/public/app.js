@@ -878,6 +878,145 @@
     return state.viewModal.mode === 'edit' ? buildViewModalEdit(state.viewModal.system) : buildViewModalView(state.viewModal.system);
   }
 
+  // ---------------- Assinaturas (múltiplas por sistema) ----------------
+  function subscriptionsTotals(subs) {
+    subs = subs || [];
+    const total = subs.reduce((sum, s) => sum + (typeof s.value === 'number' && !isNaN(s.value) ? s.value : 0), 0);
+    return { count: subs.length, total };
+  }
+
+  function buildSubsTotalsRow(count, total) {
+    return el('div', { class: 'subs-totals' }, [
+      el('span', { class: 'subs-total-badge' }, ['Total de assinaturas: ' + count]),
+      el('span', { class: 'subs-total-badge value' }, ['Valor total: ' + formatCurrencyBRL(total)]),
+    ]);
+  }
+
+  // Somente leitura — usado no modal Visualizador.
+  function buildSubscriptionsView(subs) {
+    subs = subs || [];
+    const { count, total } = subscriptionsTotals(subs);
+    const wrap = el('div', { class: 'subs-view' }, [buildSubsTotalsRow(count, total)]);
+
+    if (!subs.length) {
+      wrap.appendChild(el('div', { class: 'subs-empty' }, ['Nenhuma assinatura cadastrada.']));
+      return wrap;
+    }
+
+    const list = el('div', { class: 'subs-view-list' }, [
+      el('div', { class: 'subs-view-row subs-view-header' }, [
+        el('span', {}, ['Nome']),
+        el('span', {}, ['Valor']),
+        el('span', {}, ['Vencimento']),
+      ]),
+      ...subs.map((s) => el('div', { class: 'subs-view-row' }, [
+        el('span', {}, [s.name || '—']),
+        el('span', {}, [formatCurrencyBRL(s.value) || '—']),
+        el('span', {}, [formatDateBR(s.due_date) || '—']),
+      ])),
+    ]);
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  // Editável — usado nos modais de criação/edição. Suporta 0..N assinaturas,
+  // com uma linha por assinatura, botão de adicionar/remover e um resumo
+  // (total de assinaturas + valor total) que se mantém organizado mesmo
+  // com muitas linhas (a lista fica com rolagem própria).
+  function buildSubscriptionsEditor(initialSubs) {
+    const rows = [];
+    const listEl = el('div', { class: 'subs-list' });
+    const emptyMsg = el('div', { class: 'subs-empty' }, ['Nenhuma assinatura adicionada ainda.']);
+    const totalsEl = el('div', { class: 'subs-totals' });
+
+    function refreshTotals() {
+      const values = rows.map((r) => {
+        const raw = r.valueInput.value;
+        return raw === '' ? 0 : Number(raw);
+      });
+      const total = values.reduce((sum, v) => sum + (isNaN(v) ? 0 : v), 0);
+      totalsEl.innerHTML = '';
+      totalsEl.appendChild(el('span', { class: 'subs-total-badge' }, ['Total de assinaturas: ' + rows.length]));
+      totalsEl.appendChild(el('span', { class: 'subs-total-badge value' }, ['Valor total: ' + formatCurrencyBRL(total)]));
+    }
+
+    function refreshEmptyState() {
+      emptyMsg.style.display = rows.length ? 'none' : 'block';
+      listEl.style.display = rows.length ? 'flex' : 'none';
+    }
+
+    function addRow(sub) {
+      sub = sub || {};
+      const nameInput = el('input', { type: 'text', placeholder: 'Ex: Plano mensal', value: sub.name || '' });
+      const valueInput = el('input', {
+        type: 'number', step: '0.01', min: '0', placeholder: '0,00',
+        value: sub.value !== undefined && sub.value !== null ? sub.value : '',
+      });
+      const dateInput = el('input', { type: 'date', value: sub.due_date || '' });
+      valueInput.addEventListener('input', refreshTotals);
+
+      const removeBtn = el('button', {
+        type: 'button', class: 'btn btn-danger btn-icon subs-remove-btn', title: 'Remover assinatura',
+        html: icon('trash'),
+      });
+
+      const rowEl = el('div', { class: 'subs-row' }, [nameInput, valueInput, dateInput, removeBtn]);
+      const rowObj = { rowEl, nameInput, valueInput, dateInput };
+      removeBtn.addEventListener('click', () => {
+        const idx = rows.indexOf(rowObj);
+        if (idx >= 0) rows.splice(idx, 1);
+        rowEl.remove();
+        refreshTotals();
+        refreshEmptyState();
+      });
+
+      rows.push(rowObj);
+      listEl.appendChild(rowEl);
+      refreshTotals();
+      refreshEmptyState();
+    }
+
+    const addBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm' }, [
+      el('span', { html: icon('plus') }), ' Adicionar assinatura',
+    ]);
+    addBtn.addEventListener('click', () => addRow());
+
+    (initialSubs || []).forEach(addRow);
+    refreshTotals();
+    refreshEmptyState();
+
+    const header = el('div', { class: 'subs-header' }, [
+      el('span', {}, ['Nome']),
+      el('span', {}, ['Valor (R$)']),
+      el('span', {}, ['Vencimento']),
+      el('span', {}, ['']),
+    ]);
+
+    const container = el('div', { class: 'subs-editor' }, [
+      header,
+      listEl,
+      emptyMsg,
+      addBtn,
+      totalsEl,
+    ]);
+
+    function getSubscriptions() {
+      return rows
+        .map((r) => ({
+          name: r.nameInput.value.trim(),
+          value: r.valueInput.value === '' ? null : Number(r.valueInput.value),
+          due_date: r.dateInput.value || '',
+        }))
+        .filter((s) => s.name || s.value !== null || s.due_date);
+    }
+
+    function hasInvalidValue() {
+      return rows.some((r) => r.valueInput.value !== '' && (isNaN(Number(r.valueInput.value)) || Number(r.valueInput.value) < 0));
+    }
+
+    return { container, getSubscriptions, hasInvalidValue };
+  }
+
   function buildViewModalView(sys) {
     const categories = Array.isArray(sys.categories) ? sys.categories : [];
 
@@ -940,12 +1079,14 @@
       el('div', { class: 'view-modal-grid' }, [
         viewField('E-mail de acesso', sys.login_email || '—'),
         viewField('Senha', sys.has_password ? '••••••••' : '—'),
-        viewField('Assinatura', sys.subscription_name || '—'),
-        viewField('Valor', formatCurrencyBRL(sys.subscription_value) || '—'),
-        viewField('Vencimento', formatDateBR(sys.subscription_due_date) || '—'),
+        viewField('Repositório', sys.repo_url
+          ? el('a', { href: normalizedUrl(sys.repo_url), target: '_blank', rel: 'noopener' }, [sys.repo_url])
+          : '—'),
         viewField('Cadastrado em', sys.created_at ? formatDateBR(sys.created_at) : '—'),
         viewField('Atualizado em', sys.updated_at ? formatDateBR(sys.updated_at) : '—'),
       ]),
+      el('div', { class: 'field-section-title' }, ['Assinaturas']),
+      buildSubscriptionsView(sys.subscriptions),
     ]);
 
     const card = el('div', { class: 'modal-card view-modal-card' }, [
@@ -973,6 +1114,7 @@
   function buildViewModalEdit(sys) {
     const nameInput = el('input', { type: 'text', placeholder: 'Ex: Hello Conecta — ERP', value: sys.name || '' });
     const urlInput = el('input', { type: 'text', placeholder: 'https://sistema.helloinova.com.br', value: sys.url || '' });
+    const repoUrlInput = el('input', { type: 'text', placeholder: 'https://github.com/sua-org/seu-repo', value: sys.repo_url || '' });
     const emailInput = el('input', { type: 'text', placeholder: 'usuario@sistema.com', autocomplete: 'off', value: sys.login_email || '' });
     const passInput = el('input', {
       type: 'password', placeholder: 'Deixe em branco para manter a atual',
@@ -996,12 +1138,7 @@
       }, [cat]))
     );
 
-    const subscriptionNameInput = el('input', { type: 'text', placeholder: 'Ex: Plano mensal', value: sys.subscription_name || '' });
-    const subscriptionValueInput = el('input', {
-      type: 'number', step: '0.01', min: '0', placeholder: '0,00',
-      value: sys.subscription_value !== undefined && sys.subscription_value !== null ? sys.subscription_value : '',
-    });
-    const subscriptionDueInput = el('input', { type: 'date', value: sys.subscription_due_date || '' });
+    const subsEditor = buildSubscriptionsEditor(sys.subscriptions || []);
 
     let logoData = sys.logo || '';
     const logoPreview = el('div', { class: 'logo-preview' }, [
@@ -1043,28 +1180,23 @@
     saveBtn.addEventListener('click', async () => {
       const name = nameInput.value.trim();
       const url = urlInput.value.trim();
+      const repoUrl = repoUrlInput.value.trim();
       const email = emailInput.value.trim();
       const password = passInput.value;
       const categories = Array.from(categorySelect.selectedOptions).map((o) => o.value);
-      const subscriptionName = subscriptionNameInput.value.trim();
-      const subscriptionValueRaw = subscriptionValueInput.value;
-      const subscriptionValue = subscriptionValueRaw === '' ? null : Number(subscriptionValueRaw);
-      const subscriptionDue = subscriptionDueInput.value || '';
 
       if (!name) { toast('Informe o nome do sistema.', true); return; }
       if (!url) { toast('Informe o link de acesso ao sistema.', true); return; }
-      if (subscriptionValueRaw !== '' && (isNaN(subscriptionValue) || subscriptionValue < 0)) {
+      if (subsEditor.hasInvalidValue()) {
         toast('Informe um valor de assinatura válido.', true); return;
       }
 
       saveBtn.disabled = true;
       try {
         const body = {
-          name, url, login_email: email, logo: logoData,
+          name, url, repo_url: repoUrl, login_email: email, logo: logoData,
           categories,
-          subscription_name: subscriptionName,
-          subscription_value: subscriptionValue,
-          subscription_due_date: subscriptionDue,
+          subscriptions: subsEditor.getSubscriptions(),
         };
         if (password) body.login_password = password;
         const res = await api('/systems/' + sys.id, { method: 'PUT', body });
@@ -1081,6 +1213,7 @@
     const body = el('div', { class: 'modal-body' }, [
       el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Link do repositório']), repoUrlInput]),
       el('div', { class: 'field' }, [
         el('label', {}, ['Tipo de sistema']),
         categorySelect,
@@ -1091,12 +1224,8 @@
         el('label', {}, ['Senha']),
         el('div', { class: 'password-field' }, [passInput, passToggle]),
       ]),
-      el('div', { class: 'field-section-title' }, ['Assinatura']),
-      el('div', { class: 'field' }, [el('label', {}, ['Nome da assinatura / plano']), subscriptionNameInput]),
-      el('div', { class: 'sysmgr-grid' }, [
-        el('div', { class: 'field' }, [el('label', {}, ['Valor (R$)']), subscriptionValueInput]),
-        el('div', { class: 'field' }, [el('label', {}, ['Vencimento']), subscriptionDueInput]),
-      ]),
+      el('div', { class: 'field-section-title' }, ['Assinaturas']),
+      subsEditor.container,
       el('div', { class: 'field' }, [
         el('label', {}, ['Logo do sistema']),
         el('div', { class: 'logo-upload' }, [
@@ -1136,6 +1265,7 @@
   function buildSystemModal() {
     const nameInput = el('input', { type: 'text', placeholder: 'Ex: Hello Conecta — ERP' });
     const urlInput = el('input', { type: 'text', placeholder: 'https://sistema.helloinova.com.br' });
+    const repoUrlInput = el('input', { type: 'text', placeholder: 'https://github.com/sua-org/seu-repo' });
     const emailInput = el('input', { type: 'text', placeholder: 'usuario@sistema.com', autocomplete: 'off' });
     const passInput = el('input', { type: 'password', placeholder: '••••••••', autocomplete: 'new-password' });
 
@@ -1143,9 +1273,7 @@
       SYSTEM_CATEGORIES.map((cat) => el('option', { value: cat }, [cat]))
     );
 
-    const subscriptionNameInput = el('input', { type: 'text', placeholder: 'Ex: Plano mensal' });
-    const subscriptionValueInput = el('input', { type: 'number', step: '0.01', min: '0', placeholder: '0,00' });
-    const subscriptionDueInput = el('input', { type: 'date' });
+    const subsEditor = buildSubscriptionsEditor([]);
 
     const passToggle = el('button', {
       type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
@@ -1191,28 +1319,23 @@
     primaryBtn.addEventListener('click', async () => {
       const name = nameInput.value.trim();
       const url = urlInput.value.trim();
+      const repoUrl = repoUrlInput.value.trim();
       const email = emailInput.value.trim();
       const password = passInput.value;
       const categories = Array.from(categorySelect.selectedOptions).map((o) => o.value);
-      const subscriptionName = subscriptionNameInput.value.trim();
-      const subscriptionValueRaw = subscriptionValueInput.value;
-      const subscriptionValue = subscriptionValueRaw === '' ? null : Number(subscriptionValueRaw);
-      const subscriptionDue = subscriptionDueInput.value || '';
 
       if (!name) { toast('Informe o nome do sistema.', true); return; }
       if (!url) { toast('Informe o link de acesso ao sistema.', true); return; }
-      if (subscriptionValueRaw !== '' && (isNaN(subscriptionValue) || subscriptionValue < 0)) {
+      if (subsEditor.hasInvalidValue()) {
         toast('Informe um valor de assinatura válido.', true); return;
       }
 
       primaryBtn.disabled = true;
       try {
         const body = {
-          name, url, login_email: email, logo: logoData,
+          name, url, repo_url: repoUrl, login_email: email, logo: logoData,
           categories,
-          subscription_name: subscriptionName,
-          subscription_value: subscriptionValue,
-          subscription_due_date: subscriptionDue,
+          subscriptions: subsEditor.getSubscriptions(),
           login_password: password,
         };
         const res = await api('/systems', { method: 'POST', body });
@@ -1228,6 +1351,7 @@
     const body = el('div', { class: 'modal-body' }, [
       el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Link do repositório']), repoUrlInput]),
       el('div', { class: 'field' }, [
         el('label', {}, ['Tipo de sistema']),
         categorySelect,
@@ -1238,12 +1362,8 @@
         el('label', {}, ['Senha']),
         el('div', { class: 'password-field' }, [passInput, passToggle]),
       ]),
-      el('div', { class: 'field-section-title' }, ['Assinatura']),
-      el('div', { class: 'field' }, [el('label', {}, ['Nome da assinatura / plano']), subscriptionNameInput]),
-      el('div', { class: 'sysmgr-grid' }, [
-        el('div', { class: 'field' }, [el('label', {}, ['Valor (R$)']), subscriptionValueInput]),
-        el('div', { class: 'field' }, [el('label', {}, ['Vencimento']), subscriptionDueInput]),
-      ]),
+      el('div', { class: 'field-section-title' }, ['Assinaturas']),
+      subsEditor.container,
       el('div', { class: 'field' }, [
         el('label', {}, ['Logo do sistema']),
         el('div', { class: 'logo-upload' }, [

@@ -711,6 +711,7 @@ button { font-family: inherit; }
   border-radius: var(--radius-md);
   background: var(--bg-1);
   overflow: hidden;
+  flex-shrink: 0;
 }
 .sysmgr-row-main {
   display: flex;
@@ -881,6 +882,125 @@ button { font-family: inherit; }
 
 @media (max-width: 560px) {
   .modal-card { max-width: 100%; }
+}
+
+/* ============================================================
+   Assinaturas (múltiplas por sistema) — editor e visualização
+   ============================================================ */
+.subs-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.subs-total-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(47, 123, 255, 0.14);
+  color: var(--blue-400);
+  border: 1px solid rgba(47, 123, 255, 0.28);
+  white-space: nowrap;
+}
+.subs-total-badge.value {
+  background: rgba(46, 204, 113, 0.14);
+  color: #3ddc84;
+  border-color: rgba(46, 204, 113, 0.3);
+}
+
+/* ---- Editor (criação/edição) ---- */
+.subs-editor {
+  margin-bottom: 16px;
+}
+.subs-header,
+.subs-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 100px) minmax(0, 150px) 34px;
+  gap: 8px;
+  align-items: center;
+}
+.subs-row > * { min-width: 0; }
+.subs-header {
+  padding: 0 2px 6px;
+}
+.subs-header span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-2);
+}
+.subs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 10px;
+}
+.subs-row {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+}
+.subs-row input { margin: 0; }
+.subs-remove-btn { flex-shrink: 0; }
+.subs-empty {
+  font-size: 12.5px;
+  color: var(--text-2);
+  padding: 12px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+.subs-editor .subs-totals { margin-top: 10px; }
+
+@media (max-width: 640px) {
+  .subs-header { display: none; }
+  .subs-row { grid-template-columns: 1fr; gap: 6px; }
+  .subs-remove-btn { justify-self: flex-end; }
+}
+
+/* ---- Visualização (somente leitura, no Visualizador) ---- */
+.subs-view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 12px;
+  padding-right: 4px;
+}
+.subs-view-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-0);
+  font-size: 13.5px;
+  color: var(--text-0);
+}
+.subs-view-row > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subs-view-header {
+  background: transparent;
+  border: none;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-2);
+}
+
+@media (max-width: 640px) {
+  .subs-view-header { display: none; }
+  .subs-view-row { grid-template-columns: 1fr; gap: 2px; }
 }
 
 /* ============================================================
