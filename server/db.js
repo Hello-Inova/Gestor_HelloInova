@@ -9,8 +9,17 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const DB_PATH = path.join(DATA_DIR, 'helloinova.db');
 const db = new DatabaseSync(DB_PATH);
 
+// Observação: NÃO usamos "PRAGMA journal_mode = WAL" aqui de propósito.
+// O WAL depende de um arquivo auxiliar (.db-shm) mapeado em memória, que é
+// notoriamente instável quando o banco fica dentro de uma pasta sincronizada
+// por OneDrive/Google Drive/Dropbox (como costuma ser "Desktop" no Windows) —
+// o cliente de sincronização mexe nesse arquivo enquanto o SQLite o usa e
+// isso gera erros como "disk I/O error", fazendo alterações (como editar um
+// sistema) parecerem não salvar. O modo padrão (rollback journal) não usa
+// esse arquivo e é muito mais tolerante a esse tipo de pasta.
 db.exec(`
-  PRAGMA journal_mode = WAL;
+  PRAGMA journal_mode = DELETE;
+  PRAGMA busy_timeout = 5000;
   PRAGMA foreign_keys = ON;
 
   CREATE TABLE IF NOT EXISTS users (
