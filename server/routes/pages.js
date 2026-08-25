@@ -9,38 +9,38 @@ function getOwnedPage(pageId, userId) {
   return db.prepare('SELECT * FROM pages WHERE id = ? AND user_id = ?').get(pageId, userId);
 }
 
-// Lista páginas do usuário, com seus elementos
+// Lista módulos do usuário, com seus elementos
 router.get('/', (req, res) => {
   const pages = db
     .prepare('SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC')
     .all(req.user.id);
 
   const elementsStmt = db.prepare('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC');
-  const result = pages.map((p) => ({ ...p, elements: elementsStmt.all(p.id) }));
+  const result = pages.map((p) => ({ ...p, elements: p.type === 'systems' ? [] : elementsStmt.all(p.id) }));
   res.json({ pages: result });
 });
 
-// Cria página
+// Cria módulo (sempre do tipo "canvas" — o módulo "Gestor de Sistemas" é único e criado no cadastro)
 router.post('/', (req, res) => {
   const { name } = req.body || {};
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome da página.' });
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do módulo.' });
 
   const maxOrder = db
     .prepare('SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?')
     .get(req.user.id).m;
 
   const info = db
-    .prepare('INSERT INTO pages (user_id, name, order_index) VALUES (?, ?, ?)')
+    .prepare("INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, 'canvas', ?)")
     .run(req.user.id, name.trim(), maxOrder + 1);
 
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json({ page: { ...page, elements: [] } });
 });
 
-// Renomeia / reordena página
+// Renomeia / reordena módulo
 router.put('/:id', (req, res) => {
   const page = getOwnedPage(req.params.id, req.user.id);
-  if (!page) return res.status(404).json({ error: 'Página não encontrada.' });
+  if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
 
   const { name, order_index } = req.body || {};
   const newName = typeof name === 'string' && name.trim() ? name.trim() : page.name;
@@ -51,13 +51,17 @@ router.put('/:id', (req, res) => {
   res.json({ page: updated });
 });
 
-// Exclui página
+// Exclui módulo
 router.delete('/:id', (req, res) => {
   const page = getOwnedPage(req.params.id, req.user.id);
-  if (!page) return res.status(404).json({ error: 'Página não encontrada.' });
+  if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
+
+  if (page.type === 'systems') {
+    return res.status(400).json({ error: 'O módulo "Gestor de Sistemas" não pode ser excluído.' });
+  }
 
   const total = db.prepare('SELECT COUNT(*) as c FROM pages WHERE user_id = ?').get(req.user.id).c;
-  if (total <= 1) return res.status(400).json({ error: 'É necessário manter ao menos uma página.' });
+  if (total <= 1) return res.status(400).json({ error: 'É necessário manter ao menos um módulo.' });
 
   db.prepare('DELETE FROM elements WHERE page_id = ?').run(page.id);
   db.prepare('DELETE FROM pages WHERE id = ?').run(page.id);

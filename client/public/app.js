@@ -10,6 +10,7 @@
   const state = {
     user: null,
     pages: [],
+    systems: null,
     selectedPageId: null,
     selectedElementId: null,
     sidebarTab: 'pages', // 'pages' | 'props'
@@ -65,6 +66,9 @@
       button: '<rect x="3" y="8" width="18" height="8" rx="4"/>',
       layers: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
       sliders: '<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/>',
+      launch: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/>',
+      server: '<rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01"/><path d="M6 17.5h.01"/>',
+      info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
   }
@@ -95,7 +99,7 @@
     try {
       const { user } = await api('/auth/me');
       state.user = user;
-      await loadPages();
+      await Promise.all([loadPages(), loadSystems()]);
     } catch (e) {
       state.user = null;
     }
@@ -109,6 +113,15 @@
     if (!state.selectedPageId && pages.length) state.selectedPageId = pages[0].id;
     if (state.selectedPageId && !pages.find((p) => p.id === state.selectedPageId)) {
       state.selectedPageId = pages.length ? pages[0].id : null;
+    }
+  }
+
+  async function loadSystems() {
+    try {
+      const { systems } = await api('/systems');
+      state.systems = systems;
+    } catch (err) {
+      state.systems = state.systems || [];
     }
   }
 
@@ -185,7 +198,7 @@
             const { user } = await api('/auth/register', { method: 'POST', body: { name, email, password } });
             state.user = user;
           }
-          await loadPages();
+          await Promise.all([loadPages(), loadSystems()]);
           render();
         } catch (err) {
           submitBtn.disabled = false;
@@ -281,7 +294,7 @@
       el('button', {
         class: 'sidebar-tab' + (state.sidebarTab === 'pages' ? ' active' : ''),
         onclick: () => { state.sidebarTab = 'pages'; render(); },
-      }, ['Páginas']),
+      }, ['Módulos']),
       el('button', {
         class: 'sidebar-tab' + (state.sidebarTab === 'props' ? ' active' : ''),
         disabled: !state.selectedElementId,
@@ -353,7 +366,7 @@
           page.name = newName;
           try {
             await api('/pages/' + page.id, { method: 'PUT', body: { name: newName } });
-            toast('Nome da página atualizado.');
+            toast('Nome do módulo atualizado.');
           } catch (err) {
             toast(err.message, true);
           }
@@ -395,12 +408,12 @@
             onclick: (ev) => { ev.stopPropagation(); nameInput.removeAttribute('readonly'); nameInput.classList.add('editing'); nameInput.focus(); nameInput.select(); },
             html: icon('edit'),
           }),
-          el('button', {
-            class: 'icon-btn danger', title: 'Excluir página',
+          page.type === 'systems' ? null : el('button', {
+            class: 'icon-btn danger', title: 'Excluir módulo',
             onclick: async (ev) => {
               ev.stopPropagation();
-              if (state.pages.length <= 1) { toast('É necessário manter ao menos uma página.', true); return; }
-              if (!confirm('Excluir a página "' + page.name + '"? Todos os elementos dela serão perdidos.')) return;
+              if (state.pages.length <= 1) { toast('É necessário manter ao menos um módulo.', true); return; }
+              if (!confirm('Excluir o módulo "' + page.name + '"? Todos os elementos dele serão perdidos.')) return;
               try {
                 await api('/pages/' + page.id, { method: 'DELETE' });
                 await loadPages();
@@ -421,7 +434,7 @@
     wrap.appendChild(el('button', {
       class: 'btn btn-ghost btn-block new-page-btn',
       onclick: async () => {
-        const name = prompt('Nome da nova página de navegação:', 'Nova página');
+        const name = prompt('Nome do novo módulo:', 'Novo módulo');
         if (!name || !name.trim()) return;
         try {
           const { page } = await api('/pages', { method: 'POST', body: { name: name.trim() } });
@@ -430,7 +443,7 @@
           render();
         } catch (err) { toast(err.message, true); }
       },
-    }, [el('span', { html: icon('plus') }), ' Nova página']));
+    }, [el('span', { html: icon('plus') }), ' Novo módulo']));
 
     return wrap;
   }
@@ -603,16 +616,17 @@
   function round1(n) { return Math.round(n * 10) / 10; }
   function clamp(n, min, max) { if (isNaN(n)) return min; return Math.min(max, Math.max(min, n)); }
 
-  // ---------------- Área principal / canvas ----------------
+  // ---------------- Área principal ----------------
   function buildMain() {
     const main = el('div', { class: 'main' });
     const page = currentPage();
+    const isSystems = page && page.type === 'systems';
 
     const header = el('div', { class: 'main-header' }, [
       el('div', { class: 'page-title-wrap' }, [
-        el('h2', {}, [page ? page.name : 'Nenhuma página']),
+        el('h2', {}, [page ? page.name : 'Nenhum módulo']),
       ]),
-      el('div', { class: 'toolbox' }, [
+      isSystems ? el('div', {}) : el('div', { class: 'toolbox' }, [
         toolboxBtn('type', 'Texto', () => addElement('label')),
         toolboxBtn('input', 'Campo', () => addElement('input')),
         toolboxBtn('button', 'Botão', () => addElement('button')),
@@ -624,15 +638,22 @@
       ]),
     ]);
 
+    main.appendChild(header);
+
+    if (isSystems) {
+      main.appendChild(buildSystemsManager());
+      return main;
+    }
+
     const canvasScroll = el('div', { class: 'canvas-scroll' });
     const canvas = el('div', { class: 'canvas' + (state.mode === 'preview' ? ' locked' : ''), id: 'hi-canvas' });
 
     if (!page) {
-      canvas.appendChild(el('div', { class: 'canvas-empty' }, ['Crie uma página para começar.']));
+      canvas.appendChild(el('div', { class: 'canvas-empty' }, ['Crie um módulo para começar.']));
     } else if (!page.elements.length) {
       canvas.appendChild(el('div', { class: 'canvas-empty' }, [
         el('span', { html: icon('layers') }),
-        el('div', {}, ['Esta página ainda não tem elementos.']),
+        el('div', {}, ['Este módulo ainda não tem elementos.']),
         el('div', {}, ['Use os botões acima para adicionar texto, campos e botões.']),
       ]));
     } else {
@@ -640,9 +661,183 @@
     }
 
     canvasScroll.appendChild(canvas);
-    main.appendChild(header);
     main.appendChild(canvasScroll);
     return main;
+  }
+
+  // ---------------- Gestor de Sistemas (módulo especial) ----------------
+  function launchSystem(url, email, password) {
+    let fullUrl = (url || '').trim();
+    if (!fullUrl) { toast('Informe o link de acesso ao sistema.', true); return; }
+    if (!/^https?:\/\//i.test(fullUrl)) fullUrl = 'https://' + fullUrl;
+
+    window.open(fullUrl, '_blank', 'noopener');
+
+    if (password && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(password).catch(() => {});
+      toast('Sistema aberto em nova aba. Senha copiada — cole no campo de login (Ctrl+V).' + (email ? ' E-mail: ' + email : ''));
+    } else if (email) {
+      toast('Sistema aberto em nova aba. E-mail de acesso: ' + email);
+    } else {
+      toast('Sistema aberto em nova aba.');
+    }
+  }
+
+  function buildSystemsManager() {
+    const wrap = el('div', { class: 'canvas-scroll' });
+    const inner = el('div', { class: 'sysmgr' });
+
+    // ---- Formulário de acesso rápido ----
+    const nameInput = el('input', { type: 'text', placeholder: 'Ex: Hello Conecta — ERP' });
+    const urlInput = el('input', { type: 'text', placeholder: 'https://sistema.helloinova.com.br' });
+    const emailInput = el('input', { type: 'text', placeholder: 'usuario@sistema.com', autocomplete: 'off' });
+    const passInput = el('input', { type: 'password', placeholder: '••••••••', autocomplete: 'new-password' });
+
+    const loginAsBtn = el('button', { class: 'btn btn-primary', type: 'button' }, [
+      el('span', { html: icon('launch') }), ' Login As',
+    ]);
+
+    loginAsBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      const url = urlInput.value.trim();
+      const email = emailInput.value.trim();
+      const password = passInput.value;
+
+      if (!name) { toast('Informe o nome do sistema.', true); return; }
+      if (!url) { toast('Informe o link de acesso ao sistema.', true); return; }
+
+      loginAsBtn.disabled = true;
+      try {
+        const existing = state.systems.find((s) => s.url === url);
+        let saved;
+        if (existing) {
+          const body = { name, url, login_email: email };
+          if (password) body.login_password = password;
+          const res = await api('/systems/' + existing.id, { method: 'PUT', body });
+          saved = res.system;
+          state.systems = state.systems.map((s) => (s.id === saved.id ? saved : s));
+        } else {
+          const res = await api('/systems', { method: 'POST', body: { name, url, login_email: email, login_password: password } });
+          saved = res.system;
+          state.systems = [saved, ...state.systems];
+        }
+        launchSystem(url, email, password);
+        nameInput.value = '';
+        urlInput.value = '';
+        emailInput.value = '';
+        passInput.value = '';
+        render();
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        loginAsBtn.disabled = false;
+      }
+    });
+
+    const formCard = el('div', { class: 'sysmgr-card' }, [
+      el('h3', {}, [el('span', { html: icon('launch') }), ' Acesso rápido']),
+      el('p', { class: 'sysmgr-sub' }, ['Preencha os dados do sistema e clique em "Login As" para abrir e já cadastrar para os próximos acessos.']),
+      el('div', { class: 'sysmgr-grid' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['E-mail do sistema']), emailInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Senha']), passInput]),
+      ]),
+      el('div', { class: 'sysmgr-actions' }, [loginAsBtn]),
+      el('div', { class: 'hint-box' }, [
+        el('span', { html: icon('info') }),
+        el('span', {}, [
+          'Por segurança dos navegadores, não é possível preencher automaticamente o formulário de login de outro site a partir daqui. O "Login As" abre o sistema em uma nova aba e copia a senha para você colar (Ctrl+V) — o e-mail aparece no aviso para copiar também.',
+        ]),
+      ]),
+    ]);
+
+    // ---- Lista de sistemas cadastrados ----
+    const listCard = el('div', { class: 'sysmgr-card' }, [
+      el('h3', {}, [el('span', { html: icon('server') }), ' Sistemas cadastrados']),
+      el('p', { class: 'sysmgr-sub' }, ['Reabra qualquer sistema já cadastrado com um clique.']),
+    ]);
+
+    const listBody = el('div', { class: 'sysmgr-list' });
+    const systems = state.systems || [];
+
+    if (!systems.length) {
+      listBody.appendChild(el('div', { class: 'sysmgr-empty' }, ['Nenhum sistema cadastrado ainda. Use o formulário acima para adicionar o primeiro.']));
+    } else {
+      systems.forEach((sys) => listBody.appendChild(buildSystemRow(sys)));
+    }
+
+    listCard.appendChild(listBody);
+    inner.appendChild(formCard);
+    inner.appendChild(listCard);
+    wrap.appendChild(inner);
+    return wrap;
+  }
+
+  function buildSystemRow(sys) {
+    const launchBtn = el('button', {
+      class: 'btn btn-primary btn-sm', title: 'Login As',
+      onclick: async () => {
+        launchBtn.disabled = true;
+        try {
+          const { url, login_email, login_password } = await api('/systems/' + sys.id + '/reveal');
+          launchSystem(url, login_email, login_password);
+        } catch (err) {
+          toast(err.message, true);
+        } finally {
+          launchBtn.disabled = false;
+        }
+      },
+    }, [el('span', { html: icon('launch') }), el('span', { class: 'lbl' }, [' Login As'])]);
+
+    const editBtn = el('button', {
+      class: 'btn btn-ghost btn-icon', title: 'Editar',
+      onclick: () => openEditSystemPrompt(sys),
+      html: icon('edit'),
+    });
+
+    const deleteBtn = el('button', {
+      class: 'btn btn-danger btn-icon', title: 'Excluir',
+      onclick: async () => {
+        if (!confirm('Excluir o sistema "' + sys.name + '"?')) return;
+        try {
+          await api('/systems/' + sys.id, { method: 'DELETE' });
+          state.systems = state.systems.filter((s) => s.id !== sys.id);
+          render();
+        } catch (err) { toast(err.message, true); }
+      },
+      html: icon('trash'),
+    });
+
+    return el('div', { class: 'sysmgr-row' }, [
+      el('div', { class: 'sysmgr-row-icon' }, [(sys.name || '?').trim().charAt(0).toUpperCase()]),
+      el('div', { class: 'sysmgr-row-info' }, [
+        el('div', { class: 'r-name' }, [sys.name]),
+        el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [sys.url]),
+        el('div', { class: 'r-email' }, [sys.login_email || 'sem e-mail cadastrado']),
+      ]),
+      el('div', { class: 'sysmgr-row-actions' }, [launchBtn, editBtn, deleteBtn]),
+    ]);
+  }
+
+  async function openEditSystemPrompt(sys) {
+    const name = prompt('Nome do sistema:', sys.name);
+    if (name === null) return;
+    const url = prompt('Link de acesso:', sys.url);
+    if (url === null) return;
+    const email = prompt('E-mail do sistema:', sys.login_email || '');
+    if (email === null) return;
+    const password = prompt('Nova senha (deixe em branco para manter a atual):', '');
+    if (password === null) return;
+
+    try {
+      const body = { name: name.trim() || sys.name, url: url.trim() || sys.url, login_email: email.trim() };
+      if (password) body.login_password = password;
+      const { system } = await api('/systems/' + sys.id, { method: 'PUT', body });
+      state.systems = state.systems.map((s) => (s.id === system.id ? system : s));
+      render();
+      toast('Sistema atualizado.');
+    } catch (err) { toast(err.message, true); }
   }
 
   function toolboxBtn(iconName, label, onClick) {
@@ -654,7 +849,7 @@
 
   async function addElement(type) {
     const page = currentPage();
-    if (!page) { toast('Crie uma página primeiro.', true); return; }
+    if (!page) { toast('Crie um módulo primeiro.', true); return; }
     const count = page.elements.length;
     const defaults = {
       label: { content: 'Novo texto', font_color: '#EAF0FF', bg_color: '#0b0d16', font_size: 16, font_weight: '600', border_radius: 4, width: 22, height: 6 },

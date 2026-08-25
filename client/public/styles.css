@@ -258,19 +258,19 @@ button { font-family: inherit; }
 .shell {
   display: flex;
   min-height: 100vh;
-  flex-direction: row-reverse; /* menu lateral à DIREITA */
+  flex-direction: row; /* menu lateral à ESQUERDA */
 }
 
 .topbar {
   display: none;
 }
 
-/* ---------- Sidebar direita ---------- */
+/* ---------- Sidebar esquerda ---------- */
 .sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;
   background: linear-gradient(180deg, var(--panel), var(--bg-1));
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -563,6 +563,90 @@ button { font-family: inherit; }
 .toast.error { border-color: rgba(255,84,112,0.5); color: #ffb3c0; }
 
 /* ============================================================
+   Gestor de Sistemas (módulo especial)
+   ============================================================ */
+.sysmgr {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.sysmgr-card {
+  background: linear-gradient(180deg, var(--panel), var(--bg-1));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+}
+
+.sysmgr-card h3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sysmgr-card .sysmgr-sub { color: var(--text-2); font-size: 12.5px; margin: 0 0 18px; }
+
+.sysmgr-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.sysmgr-grid .field { margin-bottom: 0; }
+.sysmgr-grid .span-2 { grid-column: 1 / -1; }
+
+.sysmgr-actions { margin-top: 18px; display: flex; justify-content: flex-end; }
+
+.sysmgr-list { display: flex; flex-direction: column; gap: 10px; }
+
+.sysmgr-empty { color: var(--text-2); font-size: 13px; text-align: center; padding: 28px 10px; }
+
+.sysmgr-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-1);
+}
+.sysmgr-row-icon {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--blue-700), var(--blue-400));
+  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 15px;
+}
+.sysmgr-row-info { flex: 1; min-width: 0; }
+.sysmgr-row-info .r-name { font-size: 14px; font-weight: 600; color: var(--text-0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sysmgr-row-info .r-url { font-size: 12px; color: var(--blue-400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; text-decoration: none; }
+.sysmgr-row-info .r-email { font-size: 11.5px; color: var(--text-2); }
+.sysmgr-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.hint-box {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: rgba(47, 123, 255, 0.08);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-1);
+  margin-top: 14px;
+  line-height: 1.5;
+}
+.hint-box svg { flex-shrink: 0; margin-top: 1px; color: var(--blue-400); }
+
+@media (max-width: 640px) {
+  .sysmgr-grid { grid-template-columns: 1fr; }
+  .sysmgr-row { flex-wrap: wrap; }
+}
+
+/* ============================================================
    Responsivo — smartphones / tablets
    ============================================================ */
 @media (max-width: 960px) {
@@ -586,13 +670,14 @@ button { font-family: inherit; }
 
   .sidebar {
     position: fixed;
-    top: 0; right: 0; bottom: 0;
+    top: 0; left: 0; bottom: 0;
     z-index: 40;
-    transform: translateX(100%);
+    transform: translateX(-100%);
     transition: transform 0.22s ease;
-    border-left: 1px solid var(--border-strong);
+    border-right: 1px solid var(--border-strong);
+    border-left: none;
     width: min(86vw, 340px);
-    box-shadow: -20px 0 50px rgba(0,0,0,0.5);
+    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
   }
   .sidebar.open { transform: translateX(0); }
 

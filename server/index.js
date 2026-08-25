@@ -6,6 +6,7 @@ require('./db'); // garante criação do schema na inicialização
 
 const authRoutes = require('./routes/auth');
 const pageRoutes = require('./routes/pages');
+const systemRoutes = require('./routes/systems');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,7 @@ app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/pages', pageRoutes);
+app.use('/api/systems', systemRoutes);
 
 // Frontend estático
 const CLIENT_DIR = path.join(__dirname, '..', 'client', 'public');

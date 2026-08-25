@@ -27,6 +27,7 @@ db.exec(`
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     icon TEXT DEFAULT 'layout',
+    type TEXT NOT NULL DEFAULT 'canvas',
     order_index INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -51,6 +52,25 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS systems (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    login_email TEXT DEFAULT '',
+    login_password_enc TEXT DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
+
+// Migração leve: adiciona a coluna "type" em bancos criados antes dessa versão.
+try {
+  db.exec("ALTER TABLE pages ADD COLUMN type TEXT NOT NULL DEFAULT 'canvas'");
+} catch (e) {
+  // coluna já existe — ignora
+}
 
 module.exports = db;

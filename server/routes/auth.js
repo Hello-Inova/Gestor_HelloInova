@@ -34,10 +34,11 @@ router.post('/register', (req, res) => {
 
   const user = { id: Number(info.lastInsertRowid), name: name.trim(), email: email.toLowerCase() };
 
-  // Cria uma página inicial de boas-vindas para o novo usuário
-  db.prepare('INSERT INTO pages (user_id, name, order_index) VALUES (?, ?, ?)').run(
+  // Cria o módulo inicial "Gestor de Sistemas" para o novo usuário
+  db.prepare('INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)').run(
     user.id,
-    'Página inicial',
+    'Gestor de Sistemas',
+    'systems',
     0
   );
 
