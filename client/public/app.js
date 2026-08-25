@@ -840,79 +840,9 @@
       : (sys.name || '?').trim().charAt(0).toUpperCase();
 
     const viewBtn = el('button', {
-      class: 'btn btn-ghost btn-icon', title: 'Visualizar sistema', type: 'button',
+      class: 'btn btn-primary btn-sm', title: 'Visualizar sistema', type: 'button',
       onclick: () => openViewModal(sys),
-      html: icon('eye'),
-    });
-
-    const detailsToggle = el('button', { class: 'btn btn-ghost btn-sm sysmgr-details-toggle', type: 'button' }, [
-      el('span', { class: 'chevron', html: icon('down') }),
-      el('span', { class: 'lbl' }, [' Detalhes']),
-    ]);
-
-    const detailsPanel = el('div', { class: 'sysmgr-row-details' });
-    let open = false;
-    detailsToggle.addEventListener('click', () => {
-      open = !open;
-      detailsPanel.classList.toggle('open', open);
-      detailsToggle.classList.toggle('active', open);
-      detailsToggle.querySelector('.chevron').innerHTML = icon(open ? 'up' : 'down');
-    });
-
-    // ---- Ações do sistema: ficam dentro dos detalhes ----
-    const launchBtn = el('button', {
-      class: 'btn btn-primary btn-sm', title: 'Login As', type: 'button',
-      onclick: async () => {
-        launchBtn.disabled = true;
-        try {
-          const { url, login_email, login_password } = await api('/systems/' + sys.id + '/reveal');
-          launchSystem(url, login_email, login_password);
-        } catch (err) {
-          toast(err.message, true);
-        } finally {
-          launchBtn.disabled = false;
-        }
-      },
-    }, [el('span', { html: icon('launch') }), el('span', { class: 'lbl' }, [' Login As'])]);
-
-    const editBtn = el('button', {
-      class: 'btn btn-ghost btn-icon', title: 'Editar', type: 'button',
-      onclick: async () => {
-        editBtn.disabled = true;
-        try {
-          const reveal = await api('/systems/' + sys.id + '/reveal');
-          openSystemModal('edit', { ...sys, login_password: reveal.login_password });
-        } catch (err) {
-          toast(err.message, true);
-        } finally {
-          editBtn.disabled = false;
-        }
-      },
-      html: icon('edit'),
-    });
-
-    const deleteBtn = el('button', {
-      class: 'btn btn-danger btn-icon', title: 'Excluir', type: 'button',
-      onclick: async () => {
-        if (!confirm('Excluir o sistema "' + sys.name + '"?')) return;
-        try {
-          await api('/systems/' + sys.id, { method: 'DELETE' });
-          state.systems = state.systems.filter((s) => s.id !== sys.id);
-          render();
-        } catch (err) { toast(err.message, true); }
-      },
-      html: icon('trash'),
-    });
-
-    const hasSubscription = !!(sys.subscription_name || sys.subscription_value != null || sys.subscription_due_date);
-
-    detailsPanel.appendChild(el('div', { class: 'sysmgr-detail-grid' }, [
-      el('div', { class: 'detail-item' }, [el('span', { class: 'dk' }, ['E-mail']), el('span', { class: 'dv' }, [sys.login_email || '—'])]),
-      el('div', { class: 'detail-item' }, [el('span', { class: 'dk' }, ['Assinatura']), el('span', { class: 'dv' }, [hasSubscription && sys.subscription_name ? sys.subscription_name : '—'])]),
-      el('div', { class: 'detail-item' }, [el('span', { class: 'dk' }, ['Valor']), el('span', { class: 'dv' }, [formatCurrencyBRL(sys.subscription_value) || '—'])]),
-      el('div', { class: 'detail-item' }, [el('span', { class: 'dk' }, ['Vencimento']), el('span', { class: 'dv' }, [formatDateBR(sys.subscription_due_date) || '—'])]),
-    ]));
-    detailsPanel.appendChild(el('div', { class: 'sysmgr-row-actions' }, [launchBtn, editBtn, deleteBtn]));
+    }, [el('span', { html: icon('eye') }), el('span', { class: 'lbl' }, [' Visualizar'])]);
 
     const mainRow = el('div', { class: 'sysmgr-row-main' }, [
       el('div', { class: 'sysmgr-row-icon' }, [iconEl]),
@@ -921,15 +851,15 @@
         el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [sys.url]),
         badges,
       ]),
-      el('div', { class: 'sysmgr-row-main-actions' }, [viewBtn, detailsToggle]),
+      el('div', { class: 'sysmgr-row-main-actions' }, [viewBtn]),
     ]);
 
-    return el('div', { class: 'sysmgr-row' }, [mainRow, detailsPanel]);
+    return el('div', { class: 'sysmgr-row' }, [mainRow]);
   }
 
-  // ---------------- Modal: Visualizador do sistema ----------------
+  // ---------------- Modal: Visualizador / Editor do sistema ----------------
   function openViewModal(sys) {
-    state.viewModal = sys;
+    state.viewModal = { system: sys, mode: 'view' };
     render();
   }
   function closeViewModal() {
@@ -945,8 +875,54 @@
   }
 
   function buildViewModal() {
-    const sys = state.viewModal;
+    return state.viewModal.mode === 'edit' ? buildViewModalEdit(state.viewModal.system) : buildViewModalView(state.viewModal.system);
+  }
+
+  function buildViewModalView(sys) {
     const categories = Array.isArray(sys.categories) ? sys.categories : [];
+
+    const launchBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, [
+      el('span', { html: icon('launch') }), el('span', { class: 'lbl' }, [' Login As']),
+    ]);
+    launchBtn.addEventListener('click', async () => {
+      launchBtn.disabled = true;
+      try {
+        const { url, login_email, login_password } = await api('/systems/' + sys.id + '/reveal');
+        launchSystem(url, login_email, login_password);
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        launchBtn.disabled = false;
+      }
+    });
+
+    const editBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, [
+      el('span', { html: icon('edit') }), el('span', { class: 'lbl' }, [' Editar']),
+    ]);
+    editBtn.addEventListener('click', async () => {
+      editBtn.disabled = true;
+      try {
+        const reveal = await api('/systems/' + sys.id + '/reveal');
+        state.viewModal = { system: { ...sys, login_password: reveal.login_password }, mode: 'edit' };
+        render();
+      } catch (err) {
+        toast(err.message, true);
+        editBtn.disabled = false;
+      }
+    });
+
+    const deleteBtn = el('button', { class: 'btn btn-danger btn-sm', type: 'button' }, [
+      el('span', { html: icon('trash') }), el('span', { class: 'lbl' }, [' Excluir']),
+    ]);
+    deleteBtn.addEventListener('click', async () => {
+      if (!confirm('Excluir o sistema "' + sys.name + '"?')) return;
+      try {
+        await api('/systems/' + sys.id, { method: 'DELETE' });
+        state.systems = state.systems.filter((s) => s.id !== sys.id);
+        closeViewModal();
+        toast('Sistema excluído.');
+      } catch (err) { toast(err.message, true); }
+    });
 
     const body = el('div', { class: 'modal-body view-modal-body' }, [
       el('div', { class: 'view-modal-top' }, [
@@ -978,8 +954,13 @@
         el('button', { class: 'btn btn-ghost btn-icon', onclick: closeViewModal, html: icon('close') }),
       ]),
       body,
-      el('div', { class: 'modal-footer' }, [
-        el('button', { class: 'btn btn-ghost', onclick: closeViewModal }, ['Fechar']),
+      el('div', { class: 'modal-footer view-modal-footer' }, [
+        deleteBtn,
+        el('div', { class: 'view-modal-footer-right' }, [
+          el('button', { class: 'btn btn-ghost', onclick: closeViewModal }, ['Fechar']),
+          editBtn,
+          launchBtn,
+        ]),
       ]),
     ]);
 
@@ -989,27 +970,22 @@
     }, [card]);
   }
 
-  // ---------------- Modal: Novo Sistema / Editar Sistema ----------------
-  function openSystemModal(mode, system) {
-    state.systemModal = { mode, system: system || null };
-    render();
-  }
-  function closeSystemModal() {
-    state.systemModal = null;
-    render();
-  }
-
-  function buildSystemModal() {
-    const cfg = state.systemModal;
-    const isEdit = cfg.mode === 'edit';
-    const sys = cfg.system || {};
-
+  function buildViewModalEdit(sys) {
     const nameInput = el('input', { type: 'text', placeholder: 'Ex: Hello Conecta — ERP', value: sys.name || '' });
     const urlInput = el('input', { type: 'text', placeholder: 'https://sistema.helloinova.com.br', value: sys.url || '' });
     const emailInput = el('input', { type: 'text', placeholder: 'usuario@sistema.com', autocomplete: 'off', value: sys.login_email || '' });
     const passInput = el('input', {
-      type: 'password', placeholder: isEdit ? 'Deixe em branco para manter a atual' : '••••••••',
+      type: 'password', placeholder: 'Deixe em branco para manter a atual',
       autocomplete: 'new-password', value: sys.login_password || '',
+    });
+    const passToggle = el('button', {
+      type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
+      html: icon('eye'),
+      onclick: () => {
+        const showing = passInput.type === 'text';
+        passInput.type = showing ? 'password' : 'text';
+        passToggle.innerHTML = icon(showing ? 'eye' : 'eyeOff');
+      },
     });
 
     const existingCategories = Array.isArray(sys.categories) ? sys.categories : [];
@@ -1026,16 +1002,6 @@
       value: sys.subscription_value !== undefined && sys.subscription_value !== null ? sys.subscription_value : '',
     });
     const subscriptionDueInput = el('input', { type: 'date', value: sys.subscription_due_date || '' });
-
-    const passToggle = el('button', {
-      type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
-      html: icon('eye'),
-      onclick: () => {
-        const showing = passInput.type === 'text';
-        passInput.type = showing ? 'password' : 'text';
-        passToggle.innerHTML = icon(showing ? 'eye' : 'eyeOff');
-      },
-    });
 
     let logoData = sys.logo || '';
     const logoPreview = el('div', { class: 'logo-preview' }, [
@@ -1066,8 +1032,160 @@
       onclick: () => { logoData = ''; logoPreview.innerHTML = ''; logoPreview.appendChild(el('span', { html: icon('image') })); logoFileInput.value = ''; },
     }, ['Remover']);
 
+    const cancelBtn = el('button', { class: 'btn btn-ghost', type: 'button' }, ['Cancelar']);
+    cancelBtn.addEventListener('click', () => {
+      const { login_password, ...rest } = sys;
+      state.viewModal = { system: rest, mode: 'view' };
+      render();
+    });
+
+    const saveBtn = el('button', { class: 'btn btn-primary', type: 'button' }, ['Salvar alterações']);
+    saveBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      const url = urlInput.value.trim();
+      const email = emailInput.value.trim();
+      const password = passInput.value;
+      const categories = Array.from(categorySelect.selectedOptions).map((o) => o.value);
+      const subscriptionName = subscriptionNameInput.value.trim();
+      const subscriptionValueRaw = subscriptionValueInput.value;
+      const subscriptionValue = subscriptionValueRaw === '' ? null : Number(subscriptionValueRaw);
+      const subscriptionDue = subscriptionDueInput.value || '';
+
+      if (!name) { toast('Informe o nome do sistema.', true); return; }
+      if (!url) { toast('Informe o link de acesso ao sistema.', true); return; }
+      if (subscriptionValueRaw !== '' && (isNaN(subscriptionValue) || subscriptionValue < 0)) {
+        toast('Informe um valor de assinatura válido.', true); return;
+      }
+
+      saveBtn.disabled = true;
+      try {
+        const body = {
+          name, url, login_email: email, logo: logoData,
+          categories,
+          subscription_name: subscriptionName,
+          subscription_value: subscriptionValue,
+          subscription_due_date: subscriptionDue,
+        };
+        if (password) body.login_password = password;
+        const res = await api('/systems/' + sys.id, { method: 'PUT', body });
+        state.systems = state.systems.map((s) => (s.id === res.system.id ? res.system : s));
+        state.viewModal = { system: res.system, mode: 'view' };
+        render();
+        toast('Sistema atualizado.');
+      } catch (err) {
+        toast(err.message, true);
+        saveBtn.disabled = false;
+      }
+    });
+
+    const body = el('div', { class: 'modal-body' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Tipo de sistema']),
+        categorySelect,
+        el('div', { class: 'field-hint' }, ['Segure Ctrl (ou Cmd no Mac) para selecionar mais de uma opção.']),
+      ]),
+      el('div', { class: 'field' }, [el('label', {}, ['E-mail do sistema']), emailInput]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Senha']),
+        el('div', { class: 'password-field' }, [passInput, passToggle]),
+      ]),
+      el('div', { class: 'field-section-title' }, ['Assinatura']),
+      el('div', { class: 'field' }, [el('label', {}, ['Nome da assinatura / plano']), subscriptionNameInput]),
+      el('div', { class: 'sysmgr-grid' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Valor (R$)']), subscriptionValueInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Vencimento']), subscriptionDueInput]),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Logo do sistema']),
+        el('div', { class: 'logo-upload' }, [
+          logoPreview,
+          el('div', { class: 'logo-upload-actions' }, [logoFileInput, logoPickBtn, logoRemoveBtn]),
+        ]),
+      ]),
+    ]);
+
+    const card = el('div', { class: 'modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Editar sistema']),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeViewModal, html: icon('close') }),
+      ]),
+      body,
+      el('div', { class: 'modal-footer' }, [cancelBtn, saveBtn]),
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (ev) => { if (ev.target === ev.currentTarget) closeViewModal(); },
+    }, [card]);
+  }
+
+  // ---------------- Modal: Novo Sistema ----------------
+  // (a edição de um sistema já existente acontece dentro do próprio modal
+  // Visualizador — veja buildViewModalEdit — este aqui é só para criação.)
+  function openSystemModal(mode) {
+    state.systemModal = { mode: mode || 'create' };
+    render();
+  }
+  function closeSystemModal() {
+    state.systemModal = null;
+    render();
+  }
+
+  function buildSystemModal() {
+    const nameInput = el('input', { type: 'text', placeholder: 'Ex: Hello Conecta — ERP' });
+    const urlInput = el('input', { type: 'text', placeholder: 'https://sistema.helloinova.com.br' });
+    const emailInput = el('input', { type: 'text', placeholder: 'usuario@sistema.com', autocomplete: 'off' });
+    const passInput = el('input', { type: 'password', placeholder: '••••••••', autocomplete: 'new-password' });
+
+    const categorySelect = el('select', { multiple: true, class: 'category-select', size: String(SYSTEM_CATEGORIES.length) },
+      SYSTEM_CATEGORIES.map((cat) => el('option', { value: cat }, [cat]))
+    );
+
+    const subscriptionNameInput = el('input', { type: 'text', placeholder: 'Ex: Plano mensal' });
+    const subscriptionValueInput = el('input', { type: 'number', step: '0.01', min: '0', placeholder: '0,00' });
+    const subscriptionDueInput = el('input', { type: 'date' });
+
+    const passToggle = el('button', {
+      type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
+      html: icon('eye'),
+      onclick: () => {
+        const showing = passInput.type === 'text';
+        passInput.type = showing ? 'password' : 'text';
+        passToggle.innerHTML = icon(showing ? 'eye' : 'eyeOff');
+      },
+    });
+
+    let logoData = '';
+    const logoPreview = el('div', { class: 'logo-preview' }, [el('span', { html: icon('image') })]);
+    const logoFileInput = el('input', { type: 'file', accept: 'image/*' });
+    logoFileInput.addEventListener('change', () => {
+      const file = logoFileInput.files && logoFileInput.files[0];
+      if (!file) return;
+      if (file.size > 1_200_000) {
+        toast('Imagem muito grande. Escolha um arquivo de até ~1MB.', true);
+        logoFileInput.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        logoData = String(reader.result);
+        logoPreview.innerHTML = '';
+        logoPreview.appendChild(el('img', { src: logoData, alt: 'logo' }));
+      };
+      reader.readAsDataURL(file);
+    });
+    const logoPickBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => logoFileInput.click() }, [
+      el('span', { html: icon('upload') }), ' Anexar logo',
+    ]);
+    const logoRemoveBtn = el('button', {
+      class: 'btn btn-ghost btn-sm', type: 'button',
+      onclick: () => { logoData = ''; logoPreview.innerHTML = ''; logoPreview.appendChild(el('span', { html: icon('image') })); logoFileInput.value = ''; },
+    }, ['Remover']);
+
     const primaryBtn = el('button', { class: 'btn btn-primary', type: 'button' }, [
-      isEdit ? 'Salvar alterações' : el('span', {}, [el('span', { html: icon('launch') }), ' Login As']),
+      el('span', {}, [el('span', { html: icon('launch') }), ' Login As']),
     ]);
 
     primaryBtn.addEventListener('click', async () => {
@@ -1095,21 +1213,12 @@
           subscription_name: subscriptionName,
           subscription_value: subscriptionValue,
           subscription_due_date: subscriptionDue,
+          login_password: password,
         };
-        if (password) body.login_password = password;
-
-        if (isEdit) {
-          const res = await api('/systems/' + sys.id, { method: 'PUT', body });
-          state.systems = state.systems.map((s) => (s.id === res.system.id ? res.system : s));
-          closeSystemModal();
-          toast('Sistema atualizado.');
-        } else {
-          body.login_password = password;
-          const res = await api('/systems', { method: 'POST', body });
-          state.systems = [res.system, ...state.systems];
-          closeSystemModal();
-          launchSystem(url, email, password);
-        }
+        const res = await api('/systems', { method: 'POST', body });
+        state.systems = [res.system, ...state.systems];
+        closeSystemModal();
+        launchSystem(url, email, password);
       } catch (err) {
         toast(err.message, true);
         primaryBtn.disabled = false;
@@ -1142,17 +1251,17 @@
           el('div', { class: 'logo-upload-actions' }, [logoFileInput, logoPickBtn, logoRemoveBtn]),
         ]),
       ]),
-      !isEdit ? el('div', { class: 'hint-box' }, [
+      el('div', { class: 'hint-box' }, [
         el('span', { html: icon('info') }),
         el('span', {}, [
           'Por segurança dos navegadores, não é possível preencher automaticamente o formulário de login de outro site a partir daqui. O "Login As" salva o sistema, abre-o em uma nova aba e copia a senha para você colar (Ctrl+V) — o e-mail aparece no aviso para copiar também.',
         ]),
-      ]) : null,
+      ]),
     ]);
 
     const card = el('div', { class: 'modal-card' }, [
       el('div', { class: 'modal-header' }, [
-        el('h3', {}, [isEdit ? 'Editar sistema' : 'Novo Sistema']),
+        el('h3', {}, ['Novo Sistema']),
         el('button', { class: 'btn btn-ghost btn-icon', onclick: closeSystemModal, html: icon('close') }),
       ]),
       body,
