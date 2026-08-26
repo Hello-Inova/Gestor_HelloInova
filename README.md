@@ -44,7 +44,7 @@ npm run dev
 
 ## Publicar na Vercel
 
-1. Importe este repositório em [vercel.com/new](https://vercel.com/new) (a Vercel detecta o Express automaticamente, sem configuração extra).
+1. Importe este repositório em [vercel.com/new](https://vercel.com/new). O projeto já inclui um `vercel.json` e um `api/index.js` que apontam explicitamente para a função serverless (ver "Estrutura do projeto" abaixo) — isso evita a detecção automática de "framework Express" da Vercel, que em alguns casos empacota o app incorretamente.
 2. Na aba **Storage** do projeto, adicione um banco **Postgres** (ex: integração com Neon) — isso injeta a variável `DATABASE_URL` automaticamente. Se preferir usar outro provedor de Postgres, defina `DATABASE_URL` manualmente em **Settings → Environment Variables**.
 3. Ainda em **Environment Variables**, defina: `JWT_SECRET` (uma string aleatória longa), `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`.
 4. Faça o deploy. O schema do banco é criado automaticamente na primeira requisição (não é preciso rodar migração manual).
@@ -53,7 +53,10 @@ npm run dev
 
 ```
 helloinova-manager/
-├── server.js            # ponto de entrada usado pela Vercel (reexporta server/index.js)
+├── vercel.json           # encaminha toda requisição para a função em api/index.js
+├── api/
+│   └── index.js          # função serverless usada pela Vercel (reexporta server/index.js)
+├── server.js             # ponto de entrada local (reexporta server/index.js)
 ├── server/
 │   ├── index.js         # bootstrap do Express, rotas e arquivos estáticos
 │   ├── db.js             # schema e conexão Postgres
@@ -64,7 +67,7 @@ helloinova-manager/
 │       ├── pages.js      # /api/pages (módulos e elementos)
 │       ├── systems.js    # /api/systems (sistemas cadastrados no Gestor de Sistemas)
 │       └── dashboard.js  # /api/dashboard (resumo gerencial/financeiro)
-└── public/                # front-end estático (servido direto pela CDN da Vercel)
+└── public/                # front-end estático, servido pela própria função Express
     ├── index.html
     ├── styles.css        # identidade visual Hello Inova
     ├── app.js            # toda a lógica do front-end (SPA)
