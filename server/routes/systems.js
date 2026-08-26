@@ -56,8 +56,8 @@ function toPublic(row) {
   };
 }
 
-function getOwned(id, userId) {
-  return db.prepare('SELECT * FROM systems WHERE id = ? AND user_id = ?').get(id, userId);
+function getOwned(id, accountId) {
+  return db.prepare('SELECT * FROM systems WHERE id = ? AND user_id = ?').get(id, accountId);
 }
 
 function validLogo(logo) {
@@ -145,7 +145,7 @@ router.get('/categories', (req, res) => {
 router.get('/', (req, res) => {
   const rows = db
     .prepare('SELECT * FROM systems WHERE user_id = ? ORDER BY id DESC')
-    .all(req.user.id);
+    .all(req.user.account_id);
   res.json({ systems: rows.map(toPublic) });
 });
 
@@ -179,7 +179,7 @@ router.post('/', (req, res) => {
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     )
     .run(
-      req.user.id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
+      req.user.account_id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
       JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || []),
       contact.contact_name, contact.contact_whatsapp, contact.contact_email,
       contract_file || '', (contract_file_name || '').trim().slice(0, 200)
@@ -191,7 +191,7 @@ router.post('/', (req, res) => {
 
 // Atualiza um sistema
 router.put('/:id', (req, res) => {
-  const row = getOwned(req.params.id, req.user.id);
+  const row = getOwned(req.params.id, req.user.account_id);
   if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
 
   const {
@@ -247,7 +247,7 @@ router.put('/:id', (req, res) => {
 
 // Exclui um sistema
 router.delete('/:id', (req, res) => {
-  const row = getOwned(req.params.id, req.user.id);
+  const row = getOwned(req.params.id, req.user.account_id);
   if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
   db.prepare('DELETE FROM systems WHERE id = ?').run(row.id);
   res.json({ ok: true });
@@ -255,7 +255,7 @@ router.delete('/:id', (req, res) => {
 
 // Revela as credenciais em texto puro (usado só no momento do "Login As")
 router.get('/:id/reveal', (req, res) => {
-  const row = getOwned(req.params.id, req.user.id);
+  const row = getOwned(req.params.id, req.user.account_id);
   if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
   res.json({
     url: row.url,

@@ -21,9 +21,11 @@ function verifyPassword(password, hash) {
 }
 
 function signToken(user) {
-  return jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET, {
-    expiresIn: SESSION_TTL_SECONDS,
-  });
+  return jwt.sign(
+    { id: user.id, email: user.email, name: user.name, account_id: user.account_id },
+    JWT_SECRET,
+    { expiresIn: SESSION_TTL_SECONDS }
+  );
 }
 
 function setAuthCookie(res, token) {

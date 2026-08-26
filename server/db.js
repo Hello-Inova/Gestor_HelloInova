@@ -115,6 +115,7 @@ const migrations = [
   "ALTER TABLE systems ADD COLUMN contract_file TEXT DEFAULT ''",
   "ALTER TABLE systems ADD COLUMN contract_file_name TEXT DEFAULT ''",
   'ALTER TABLE users ADD COLUMN dashboard_seeded INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE users ADD COLUMN account_id INTEGER',
 ];
 for (const sql of migrations) {
   try {
@@ -122,6 +123,18 @@ for (const sql of migrations) {
   } catch (e) {
     // coluna já existe — ignora
   }
+}
+
+// Toda conta pré-existente vira dona de si mesma (account_id = id). Contas
+// novas criadas a partir de um usuário já logado (módulo "Cadastro de
+// Usuário") recebem o account_id de quem as criou, passando a compartilhar
+// os mesmos módulos/sistemas/dashboard — é assim que várias pessoas da
+// mesma empresa acabam enxergando o mesmo espaço de trabalho. Roda em toda
+// inicialização mas só afeta linhas que ainda não têm account_id definido.
+try {
+  db.exec('UPDATE users SET account_id = id WHERE account_id IS NULL');
+} catch (e) {
+  // ignora se a tabela ainda não existir na primeira execução
 }
 
 // A coluna "email_verified" precisa de um tratamento especial: ela só pode
@@ -174,26 +187,58 @@ try {
   // ignora se as tabelas ainda não existirem na primeira execução
 }
 
-// Cria o módulo fixo "Dashboard" para contas que ainda não têm um (ex:
-// contas criadas antes desse módulo existir). Roda em toda inicialização,
-// mas é idempotente: uma vez que todo usuário tenha o módulo, a consulta
-// não retorna ninguém e o bloco não faz nada.
+// Cria o módulo fixo "Dashboard" para toda CONTA que ainda não tem um (ex:
+// contas criadas antes desse módulo existir). Os módulos (páginas) são
+// compartilhados por conta — não por usuário individual — porque agora uma
+// conta pode ter várias pessoas (ver account_id acima); por isso a
+// checagem é por account_id distinto, para não duplicar o módulo quando
+// duas pessoas dividem a mesma conta. Roda em toda inicialização, mas é
+// idempotente: uma vez que toda conta tenha o módulo, a consulta não
+// retorna ninguém e o bloco não faz nada.
 try {
-  const usersWithoutDashboard = db
+  const accountsWithoutDashboard = db
     .prepare(
-      `SELECT id FROM users WHERE id NOT IN (SELECT DISTINCT user_id FROM pages WHERE type = 'dashboard')`
+      `SELECT DISTINCT account_id FROM users
+       WHERE account_id NOT IN (SELECT DISTINCT user_id FROM pages WHERE type = 'dashboard')`
     )
     .all();
-  for (const u of usersWithoutDashboard) {
-    const maxOrder = db.prepare('SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?').get(u.id).m;
+  for (const a of accountsWithoutDashboard) {
+    const maxOrder = db
+      .prepare('SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?')
+      .get(a.account_id).m;
     db.prepare('INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)').run(
-      u.id,
+      a.account_id,
       'Dashboard',
       'dashboard',
       maxOrder + 1
     );
   }
   db.exec('UPDATE users SET dashboard_seeded = 1 WHERE dashboard_seeded = 0');
+} catch (e) {
+  // ignora se as tabelas ainda não existirem na primeira execução
+}
+
+// Cria o módulo fixo "Cadastro de Usuário" para toda conta que ainda não
+// tem um — mesmo raciocínio do bloco acima (um módulo por conta, não por
+// usuário).
+try {
+  const accountsWithoutUsersModule = db
+    .prepare(
+      `SELECT DISTINCT account_id FROM users
+       WHERE account_id NOT IN (SELECT DISTINCT user_id FROM pages WHERE type = 'users')`
+    )
+    .all();
+  for (const a of accountsWithoutUsersModule) {
+    const maxOrder = db
+      .prepare('SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?')
+      .get(a.account_id).m;
+    db.prepare('INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)').run(
+      a.account_id,
+      'Cadastro de Usuário',
+      'users',
+      maxOrder + 1
+    );
+  }
 } catch (e) {
   // ignora se as tabelas ainda não existirem na primeira execução
 }

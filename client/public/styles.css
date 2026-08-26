@@ -113,9 +113,44 @@ button { font-family: inherit; }
   pointer-events: none;
 }
 
-.auth-brand img.brand-mark { width: 120px; height: 120px; object-fit: contain; filter: drop-shadow(0 12px 40px var(--blue-glow)); z-index: 1; }
+/* Orbes flutuantes decorativos, atrás do conteúdo do painel de marca */
+.auth-brand-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 0;
+  animation: orb-float 9s ease-in-out infinite;
+}
+.auth-brand-orb.orb-1 {
+  width: 260px; height: 260px;
+  top: 8%; left: 8%;
+  background: radial-gradient(circle, rgba(47, 123, 255, 0.28), transparent 70%);
+  animation-duration: 11s;
+}
+.auth-brand-orb.orb-2 {
+  width: 200px; height: 200px;
+  bottom: 10%; right: 10%;
+  background: radial-gradient(circle, rgba(87, 162, 255, 0.22), transparent 70%);
+  animation-duration: 8s;
+  animation-delay: -3s;
+}
+@keyframes orb-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(18px, -22px) scale(1.08); }
+}
 
-.auth-brand .brand-wordmark { font-family: var(--font-display); font-weight: 800; font-size: 34px; letter-spacing: -0.5px; z-index: 1; }
+.auth-brand img.brand-mark {
+  width: 120px; height: 120px; object-fit: contain;
+  filter: drop-shadow(0 12px 40px var(--blue-glow));
+  z-index: 1;
+  animation: brand-mark-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) both, logo-glow 3.2s ease-in-out 0.9s infinite;
+}
+
+.auth-brand .brand-wordmark {
+  font-family: var(--font-display); font-weight: 800; font-size: 34px; letter-spacing: -0.5px; z-index: 1;
+  animation: brand-rise-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
 .auth-brand .brand-wordmark span { color: var(--blue-400); }
 
 .auth-brand .brand-tagline {
@@ -127,6 +162,7 @@ button { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 10px;
+  animation: brand-rise-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
 }
 .auth-brand .brand-tagline::before,
 .auth-brand .brand-tagline::after { content: ''; width: 26px; height: 1px; background: var(--border-strong); }
@@ -138,6 +174,20 @@ button { font-family: inherit; }
   color: var(--text-1);
   font-size: 14.5px;
   line-height: 1.6;
+  animation: brand-rise-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.45s both;
+}
+
+@keyframes brand-mark-in {
+  0% { opacity: 0; transform: scale(0.7) translateY(14px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes brand-rise-in {
+  0% { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes logo-glow {
+  0%, 100% { filter: drop-shadow(0 12px 40px var(--blue-glow)); }
+  50% { filter: drop-shadow(0 12px 52px rgba(47, 123, 255, 0.55)); }
 }
 
 .auth-form-wrap {
@@ -157,6 +207,14 @@ button { font-family: inherit; }
   box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.6);
 }
 
+.auth-card.auth-anim {
+  animation: auth-card-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes auth-card-in {
+  0% { opacity: 0; transform: translateY(22px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .auth-card h1 {
   font-family: var(--font-display);
   font-size: 22px;
@@ -168,6 +226,27 @@ button { font-family: inherit; }
   color: var(--text-2);
   font-size: 13.5px;
   margin: 0 0 26px;
+}
+
+.auth-card.auth-anim .field,
+.auth-card.auth-anim form > button {
+  animation: brand-rise-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.auth-card.auth-anim .field:nth-of-type(1) { animation-delay: 0.12s; }
+.auth-card.auth-anim .field:nth-of-type(2) { animation-delay: 0.19s; }
+.auth-card.auth-anim form > button { animation-delay: 0.26s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-brand-orb,
+  .auth-brand img.brand-mark,
+  .auth-brand .brand-wordmark,
+  .auth-brand .brand-tagline,
+  .auth-brand .brand-pitch,
+  .auth-card.auth-anim,
+  .auth-card.auth-anim .field,
+  .auth-card.auth-anim form > button {
+    animation: none !important;
+  }
 }
 
 .field { margin-bottom: 16px; }

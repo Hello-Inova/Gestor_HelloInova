@@ -9,7 +9,7 @@ router.use(requireAuth);
 // Resumo gerencial/financeiro: total de sistemas, total de assinaturas
 // (quantidade e valor somado) e quantidade de sistemas por categoria.
 router.get('/summary', (req, res) => {
-  const rows = db.prepare('SELECT categories, subscriptions FROM systems WHERE user_id = ?').all(req.user.id);
+  const rows = db.prepare('SELECT categories, subscriptions FROM systems WHERE user_id = ?').all(req.user.account_id);
 
   let subscriptionsCount = 0;
   let subscriptionsValue = 0;

@@ -106,13 +106,18 @@ function consumeCode(email, purpose, code) {
 }
 
 function loginUser(res, row) {
-  const user = { id: row.id, name: row.name, email: row.email };
+  const user = { id: row.id, name: row.name, email: row.email, account_id: row.account_id };
   const token = signToken(user);
   setAuthCookie(res, token);
-  return user;
+  return { id: user.id, name: user.name, email: user.email };
 }
 
-// ---------------- Cadastro de usuário ----------------
+// ---------------- Cadastro de usuário (bootstrap de uma conta nova) ----------------
+// Não é mais acessível pela tela de login (removida a pedido do cliente) —
+// fica disponível apenas como rota de backend para eventualmente criar uma
+// conta totalmente nova e independente (ex: outra empresa usando o mesmo
+// sistema). Para adicionar uma pessoa à conta já existente, use
+// POST /api/auth/users (exige estar logado) — ver mais abaixo.
 router.post('/register', async (req, res) => {
   const { name, email, password } = req.body || {};
 
@@ -129,13 +134,19 @@ router.post('/register', async (req, res) => {
     .prepare('INSERT INTO users (name, email, password_hash, role, email_verified) VALUES (?, ?, ?, ?, 0)')
     .run(name.trim(), normalizedEmail, hashPassword(password), 'admin');
   const userId = Number(info.lastInsertRowid);
+  // Conta nova e independente: é dona de si mesma.
+  db.prepare('UPDATE users SET account_id = ? WHERE id = ?').run(userId, userId);
 
-  // Cria os módulos iniciais fixos da conta: Gestor de Sistemas e Dashboard.
+  // Cria os módulos iniciais fixos da conta: Gestor de Sistemas, Dashboard
+  // e Cadastro de Usuário.
   db.prepare('INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)').run(
     userId, 'Gestor de Sistemas', 'systems', 0
   );
   db.prepare('INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)').run(
     userId, 'Dashboard', 'dashboard', 1
+  );
+  db.prepare('INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)').run(
+    userId, 'Cadastro de Usuário', 'users', 2
   );
   db.prepare('UPDATE users SET systems_seeded = 1, dashboard_seeded = 1 WHERE id = ?').run(userId);
 
@@ -288,12 +299,48 @@ router.put('/me', requireAuth, (req, res) => {
     current.id
   );
 
-  const user = { id: current.id, name: newName, email: newEmailRaw };
+  const user = { id: current.id, name: newName, email: newEmailRaw, account_id: current.account_id };
   const token = signToken(user);
   setAuthCookie(res, token);
 
   const updated = db.prepare('SELECT id, name, email, role, created_at FROM users WHERE id = ?').get(current.id);
   res.json({ user: updated });
+});
+
+// ---------------- Cadastro de usuário dentro da conta (só p/ logados) ----------------
+// Só é possível criar um novo usuário a partir de uma sessão já autenticada
+// (não existe mais cadastro público na tela de login). O novo usuário
+// entra na MESMA conta de quem o criou — passa a compartilhar os mesmos
+// sistemas, assinaturas e dashboard. Como quem cadastra já é uma pessoa de
+// confiança da equipe, o e-mail já entra confirmado (sem precisar do passo
+// de verificação); o login normal com código em duas etapas continua valendo.
+router.get('/users', requireAuth, (req, res) => {
+  const rows = db
+    .prepare('SELECT id, name, email, created_at FROM users WHERE account_id = ? ORDER BY id ASC')
+    .all(req.user.account_id);
+  res.json({ users: rows });
+});
+
+router.post('/users', requireAuth, (req, res) => {
+  const { name, email, password } = req.body || {};
+
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome.' });
+  if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+  if (!password || password.length < 6)
+    return res.status(400).json({ error: 'A senha deve ter ao menos 6 caracteres.' });
+
+  const normalizedEmail = email.toLowerCase();
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail);
+  if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+
+  const info = db
+    .prepare(
+      'INSERT INTO users (name, email, password_hash, role, email_verified, account_id) VALUES (?, ?, ?, ?, 1, ?)'
+    )
+    .run(name.trim(), normalizedEmail, hashPassword(password), 'admin', req.user.account_id);
+
+  const row = db.prepare('SELECT id, name, email, created_at FROM users WHERE id = ?').get(info.lastInsertRowid);
+  res.status(201).json({ user: row });
 });
 
 module.exports = router;

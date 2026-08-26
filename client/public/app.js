@@ -15,7 +15,6 @@
     selectedElementId: null,
     sidebarTab: 'pages', // 'pages' | 'props'
     mode: 'edit', // 'edit' | 'preview'
-    authView: 'login', // 'login' | 'register'
     authStep: 'form', // 'form' | 'code'
     authPending: null, // { email, purpose: 'register'|'login' }
     sidebarOpen: false,
@@ -25,6 +24,8 @@
     viewModal: null, // sistema sendo visualizado no pop-up de detalhes
     systemsSearch: '',
     systemsFilterCategories: [],
+    users: null, // lista de usuários da conta (módulo "Cadastro de Usuário")
+    userModal: false,
   };
 
   const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
@@ -241,6 +242,7 @@
       if (state.systemModal) $app.appendChild(buildSystemModal());
       if (state.profileModal) $app.appendChild(buildProfileModal());
       if (state.viewModal) $app.appendChild(buildViewModal());
+      if (state.userModal) $app.appendChild(buildUserModal());
     }
   }
 
@@ -249,6 +251,8 @@
   // ================================================================
   function authBrand() {
     return el('div', { class: 'auth-brand' }, [
+      el('div', { class: 'auth-brand-orb orb-1' }),
+      el('div', { class: 'auth-brand-orb orb-2' }),
       el('img', { class: 'brand-mark', src: '/assets/logo-mark.png', alt: 'Hello Inova' }),
       el('div', { class: 'brand-wordmark' }, ['Hello', el('span', {}, ['Inova'])]),
       el('div', { class: 'brand-tagline' }, ['Da mente às telas']),
@@ -262,24 +266,34 @@
     return state.authStep === 'code' ? renderAuthCodeScreen() : renderAuthFormScreen();
   }
 
-  // ---- Etapa 1: e-mail/senha (login) ou nome/e-mail/senha (cadastro) ----
+  // ---- Etapa 1: e-mail/senha (login) ----
+  // O cadastro de novos usuários deixou de existir nesta tela: só é
+  // possível criar um novo usuário a partir de uma conta já logada,
+  // pelo módulo "Cadastro de Usuário" no menu.
   function renderAuthFormScreen() {
-    const isLogin = state.authView === 'login';
-
     let errorBox = null;
     let submitBtn = null;
 
-    const nameField = el('div', { class: 'field' }, [
-      el('label', {}, ['Nome completo']),
-      el('input', { type: 'text', id: 'f-name', placeholder: 'Seu nome', autocomplete: 'name' }),
-    ]);
     const emailField = el('div', { class: 'field' }, [
       el('label', {}, ['E-mail']),
       el('input', { type: 'email', id: 'f-email', placeholder: 'voce@helloinova.com.br', autocomplete: 'email' }),
     ]);
+
+    const passInput = el('input', {
+      type: 'password', id: 'f-pass', placeholder: '••••••••', autocomplete: 'current-password',
+    });
+    const passToggle = el('button', {
+      type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
+      html: icon('eye'),
+      onclick: () => {
+        const showing = passInput.type === 'text';
+        passInput.type = showing ? 'password' : 'text';
+        passToggle.innerHTML = icon(showing ? 'eye' : 'eyeOff');
+      },
+    });
     const passField = el('div', { class: 'field' }, [
       el('label', {}, ['Senha']),
-      el('input', { type: 'password', id: 'f-pass', placeholder: '••••••••', autocomplete: isLogin ? 'current-password' : 'new-password' }),
+      el('div', { class: 'password-field' }, [passInput, passToggle]),
     ]);
 
     const form = el('form', {
@@ -287,24 +301,16 @@
         ev.preventDefault();
         if (errorBox) errorBox.remove();
         const email = document.getElementById('f-email').value.trim();
-        const password = document.getElementById('f-pass').value;
-        const name = document.getElementById('f-name') ? document.getElementById('f-name').value.trim() : '';
+        const password = passInput.value;
 
         submitBtn.disabled = true;
-        submitBtn.textContent = isLogin ? 'Entrando…' : 'Criando conta…';
+        submitBtn.textContent = 'Entrando…';
         try {
-          if (isLogin) {
-            const data = await api('/auth/login', { method: 'POST', body: { email, password } });
-            // Credenciais corretas: sempre pede o código de verificação por e-mail.
-            state.authPending = { email: data.email, purpose: data.purpose };
-            state.authStep = 'code';
-            render();
-          } else {
-            const data = await api('/auth/register', { method: 'POST', body: { name, email, password } });
-            state.authPending = { email: data.email, purpose: data.purpose };
-            state.authStep = 'code';
-            render();
-          }
+          const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+          // Credenciais corretas: sempre pede o código de verificação por e-mail.
+          state.authPending = { email: data.email, purpose: data.purpose };
+          state.authStep = 'code';
+          render();
         } catch (err) {
           // Conta existe mas nunca confirmou o e-mail: manda direto para a
           // tela de código (o servidor já reenviou um código novo).
@@ -316,31 +322,24 @@
             return;
           }
           submitBtn.disabled = false;
-          submitBtn.textContent = isLogin ? 'Entrar' : 'Criar conta';
+          submitBtn.textContent = 'Entrar';
           const box = el('div', { class: 'auth-error' }, [err.message]);
           form.insertBefore(box, form.firstChild);
           errorBox = box;
         }
       },
     }, [
-      isLogin ? null : nameField,
       emailField,
       passField,
     ]);
 
-    submitBtn = el('button', { type: 'submit', class: 'btn btn-primary btn-block' }, [isLogin ? 'Entrar' : 'Criar conta']);
+    submitBtn = el('button', { type: 'submit', class: 'btn btn-primary btn-block' }, ['Entrar']);
     form.appendChild(submitBtn);
 
-    const card = el('div', { class: 'auth-card' }, [
-      el('h1', {}, [isLogin ? 'Acesse sua conta' : 'Crie sua conta']),
-      el('p', { class: 'sub' }, [isLogin ? 'Entre com as credenciais cadastradas para gerenciar os sistemas Hello Inova.' : 'Cadastre-se para começar a montar seus painéis.']),
+    const card = el('div', { class: 'auth-card auth-anim' }, [
+      el('h1', {}, ['Acesse sua conta']),
+      el('p', { class: 'sub' }, ['Entre com as credenciais cadastradas para gerenciar os sistemas Hello Inova.']),
       form,
-      el('div', { class: 'auth-switch' }, [
-        isLogin ? 'Ainda não tem conta? ' : 'Já tem uma conta? ',
-        el('button', {
-          onclick: () => { state.authView = isLogin ? 'register' : 'login'; render(); },
-        }, [isLogin ? 'Cadastre-se' : 'Entrar']),
-      ]),
     ]);
 
     return el('div', { class: 'auth-screen' }, [authBrand(), el('div', { class: 'auth-form-wrap' }, [card])]);
@@ -417,7 +416,7 @@
       onclick: () => { state.authPending = null; state.authStep = 'form'; render(); },
     }, ['Voltar']);
 
-    const card = el('div', { class: 'auth-card' }, [
+    const card = el('div', { class: 'auth-card auth-anim' }, [
       el('h1', {}, ['Verifique seu e-mail']),
       el('p', { class: 'sub' }, [
         isRegister
@@ -757,6 +756,8 @@
     const page = currentPage();
     const isSystems = page && page.type === 'systems';
     const isDashboard = page && page.type === 'dashboard';
+    const isUsers = page && page.type === 'users';
+    const isSpecial = isSystems || isDashboard || isUsers;
 
     const header = el('div', { class: 'main-header' }, [
       el('div', { class: 'page-title-wrap' }, [
@@ -767,7 +768,12 @@
           class: 'btn btn-primary btn-sm',
           onclick: () => openSystemModal('create'),
         }, [el('span', { html: icon('plus') }), ' Novo Sistema']),
-      ]) : (isDashboard ? null : el('div', { class: 'toolbox' }, [
+      ]) : (isUsers ? el('div', { class: 'toolbox' }, [
+        el('button', {
+          class: 'btn btn-primary btn-sm',
+          onclick: () => { state.userModal = true; render(); },
+        }, [el('span', { html: icon('plus') }), ' Novo Usuário']),
+      ]) : (isSpecial ? null : el('div', { class: 'toolbox' }, [
         toolboxBtn('type', 'Texto', () => addElement('label')),
         toolboxBtn('input', 'Campo', () => addElement('input')),
         toolboxBtn('button', 'Botão', () => addElement('button')),
@@ -776,7 +782,7 @@
           el('button', { class: state.mode === 'edit' ? 'active' : '', onclick: () => { state.mode = 'edit'; render(); } }, ['Editar']),
           el('button', { class: state.mode === 'preview' ? 'active' : '', onclick: () => { state.mode = 'preview'; state.selectedElementId = null; render(); } }, ['Visualizar']),
         ]),
-      ])),
+      ]))),
     ]);
 
     main.appendChild(header);
@@ -788,6 +794,11 @@
 
     if (isDashboard) {
       main.appendChild(buildDashboard());
+      return main;
+    }
+
+    if (isUsers) {
+      main.appendChild(buildUsersManager());
       return main;
     }
 
@@ -876,6 +887,128 @@
         el('div', { class: 'dashboard-cat-bar-fill', style: 'width:' + pct + '%' }),
       ]),
     ]);
+  }
+
+  // ---------------- Cadastro de Usuário (módulo especial) ----------------
+  // Só é possível criar um novo usuário a partir de uma conta já logada —
+  // o novo usuário entra no mesmo espaço de trabalho compartilhado (mesmos
+  // sistemas e dashboard) e passa a poder fazer login normalmente (com o
+  // fluxo de senha + código por e-mail de sempre).
+  function buildUsersManager() {
+    const wrap = el('div', { class: 'canvas-scroll' });
+    const inner = el('div', { class: 'sysmgr' });
+
+    const listCard = el('div', { class: 'sysmgr-card grow' });
+    listCard.appendChild(el('div', { class: 'sysmgr-header-row' }, [
+      el('div', { class: 'htext' }, [
+        el('h3', {}, [el('span', { html: icon('user') }), ' Usuários da conta']),
+        el('p', { class: 'sysmgr-sub' }, ['Todas as pessoas listadas aqui compartilham os mesmos sistemas e o mesmo dashboard.']),
+      ]),
+    ]));
+
+    const listBody = el('div', { class: 'sysmgr-list' }, [
+      el('div', { class: 'dashboard-loading' }, ['Carregando usuários…']),
+    ]);
+    listCard.appendChild(listBody);
+
+    api('/auth/users')
+      .then(({ users }) => {
+        state.users = users;
+        listBody.innerHTML = '';
+        if (!users.length) {
+          listBody.appendChild(el('div', { class: 'sysmgr-empty' }, ['Nenhum usuário encontrado.']));
+          return;
+        }
+        users.forEach((u) => listBody.appendChild(buildUserRow(u)));
+      })
+      .catch((err) => {
+        listBody.innerHTML = '';
+        listBody.appendChild(el('div', { class: 'dashboard-error' }, ['Não foi possível carregar os usuários: ' + err.message]));
+      });
+
+    inner.appendChild(listCard);
+    wrap.appendChild(inner);
+    return wrap;
+  }
+
+  function buildUserRow(u) {
+    const isSelf = state.user && state.user.id === u.id;
+    const mainRow = el('div', { class: 'sysmgr-row-main' }, [
+      el('div', { class: 'sysmgr-row-icon' }, [(u.name || '?').trim().charAt(0).toUpperCase()]),
+      el('div', { class: 'sysmgr-row-info' }, [
+        el('div', { class: 'r-name' }, [u.name, isSelf ? el('span', { class: 'category-badge', style: 'margin-left:8px' }, ['Você']) : null]),
+        el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [u.email]),
+      ]),
+    ]);
+    return el('div', { class: 'sysmgr-row' }, [mainRow]);
+  }
+
+  function closeUserModal() {
+    state.userModal = false;
+    render();
+  }
+
+  function buildUserModal() {
+    const nameInput = el('input', { type: 'text', placeholder: 'Nome completo', autocomplete: 'name' });
+    const emailInput = el('input', { type: 'email', placeholder: 'voce@helloinova.com.br', autocomplete: 'email' });
+    const passInput = el('input', { type: 'password', placeholder: '••••••••', autocomplete: 'new-password' });
+    const passToggle = el('button', {
+      type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
+      html: icon('eye'),
+      onclick: () => {
+        const showing = passInput.type === 'text';
+        passInput.type = showing ? 'password' : 'text';
+        passToggle.innerHTML = icon(showing ? 'eye' : 'eyeOff');
+      },
+    });
+
+    const saveBtn = el('button', { class: 'btn btn-primary', type: 'button' }, ['Criar usuário']);
+    saveBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      const email = emailInput.value.trim();
+      const password = passInput.value;
+
+      if (!name) { toast('Informe o nome do usuário.', true); return; }
+      if (!email) { toast('Informe o e-mail do usuário.', true); return; }
+      if (!password || password.length < 6) { toast('A senha deve ter ao menos 6 caracteres.', true); return; }
+
+      saveBtn.disabled = true;
+      try {
+        await api('/auth/users', { method: 'POST', body: { name, email, password } });
+        closeUserModal();
+        toast('Usuário criado. Ele já pode fazer login normalmente.');
+      } catch (err) {
+        toast(err.message, true);
+        saveBtn.disabled = false;
+      }
+    });
+
+    const body = el('div', { class: 'modal-body' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Nome completo']), nameInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['E-mail']), emailInput]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Senha']),
+        el('div', { class: 'password-field' }, [passInput, passToggle]),
+      ]),
+      el('div', { class: 'field-hint' }, ['O novo usuário terá acesso aos mesmos sistemas e ao mesmo dashboard desta conta.']),
+    ]);
+
+    const card = el('div', { class: 'modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Novo usuário']),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeUserModal, html: icon('close') }),
+      ]),
+      body,
+      el('div', { class: 'modal-footer' }, [
+        el('button', { class: 'btn btn-ghost', onclick: closeUserModal }, ['Cancelar']),
+        saveBtn,
+      ]),
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (ev) => { if (ev.target === ev.currentTarget) closeUserModal(); },
+    }, [card]);
   }
 
   // ---------------- Gestor de Sistemas (módulo especial) ----------------

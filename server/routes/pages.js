@@ -5,40 +5,40 @@ const { requireAuth } = require('../auth');
 const router = express.Router();
 router.use(requireAuth);
 
-function getOwnedPage(pageId, userId) {
-  return db.prepare('SELECT * FROM pages WHERE id = ? AND user_id = ?').get(pageId, userId);
+function getOwnedPage(pageId, accountId) {
+  return db.prepare('SELECT * FROM pages WHERE id = ? AND user_id = ?').get(pageId, accountId);
 }
 
 // Garante que todo usuário ganhe o módulo especial "Gestor de Sistemas" uma
 // única vez (na primeira listagem após o cadastro/migração). Usa a flag
 // systems_seeded para não recriar o módulo caso o usuário o exclua de propósito.
-function ensureSystemsModule(userId) {
-  const user = db.prepare('SELECT systems_seeded FROM users WHERE id = ?').get(userId);
+function ensureSystemsModule(accountId) {
+  const user = db.prepare('SELECT systems_seeded FROM users WHERE id = ?').get(accountId);
   if (!user || user.systems_seeded) return;
 
   // Se já existe um módulo comum com esse mesmo nome (de antes desta atualização),
   // renomeia para não confundir com o novo módulo especial.
   const clash = db
     .prepare("SELECT id, name FROM pages WHERE user_id = ? AND type != 'systems' AND lower(name) = 'gestor de sistemas'")
-    .get(userId);
+    .get(accountId);
   if (clash) {
     db.prepare('UPDATE pages SET name = ? WHERE id = ?').run(clash.name + ' (antigo)', clash.id);
   }
 
-  db.prepare('UPDATE pages SET order_index = order_index + 1 WHERE user_id = ?').run(userId);
+  db.prepare('UPDATE pages SET order_index = order_index + 1 WHERE user_id = ?').run(accountId);
   db.prepare("INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Gestor de Sistemas', 'systems', 0)").run(
-    userId
+    accountId
   );
-  db.prepare('UPDATE users SET systems_seeded = 1 WHERE id = ?').run(userId);
+  db.prepare('UPDATE users SET systems_seeded = 1 WHERE id = ?').run(accountId);
 }
 
 // Lista módulos do usuário, com seus elementos
 router.get('/', (req, res) => {
-  ensureSystemsModule(req.user.id);
+  ensureSystemsModule(req.user.account_id);
 
   const pages = db
     .prepare('SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC')
-    .all(req.user.id);
+    .all(req.user.account_id);
 
   const elementsStmt = db.prepare('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC');
   const result = pages.map((p) => ({ ...p, elements: p.type === 'systems' ? [] : elementsStmt.all(p.id) }));
@@ -52,11 +52,11 @@ router.post('/', (req, res) => {
 
   const maxOrder = db
     .prepare('SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?')
-    .get(req.user.id).m;
+    .get(req.user.account_id).m;
 
   const info = db
     .prepare("INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, 'canvas', ?)")
-    .run(req.user.id, name.trim(), maxOrder + 1);
+    .run(req.user.account_id, name.trim(), maxOrder + 1);
 
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json({ page: { ...page, elements: [] } });
@@ -64,7 +64,7 @@ router.post('/', (req, res) => {
 
 // Renomeia / reordena módulo
 router.put('/:id', (req, res) => {
-  const page = getOwnedPage(req.params.id, req.user.id);
+  const page = getOwnedPage(req.params.id, req.user.account_id);
   if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
 
   const { name, order_index } = req.body || {};
@@ -78,10 +78,10 @@ router.put('/:id', (req, res) => {
 
 // Exclui módulo
 router.delete('/:id', (req, res) => {
-  const page = getOwnedPage(req.params.id, req.user.id);
+  const page = getOwnedPage(req.params.id, req.user.account_id);
   if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
 
-  const total = db.prepare('SELECT COUNT(*) as c FROM pages WHERE user_id = ?').get(req.user.id).c;
+  const total = db.prepare('SELECT COUNT(*) as c FROM pages WHERE user_id = ?').get(req.user.account_id).c;
   if (total <= 1) return res.status(400).json({ error: 'É necessário manter ao menos um módulo.' });
 
   db.prepare('DELETE FROM elements WHERE page_id = ?').run(page.id);
@@ -95,7 +95,7 @@ router.put('/', (req, res) => {
   if (!Array.isArray(order)) return res.status(400).json({ error: 'Ordem inválida.' });
 
   const update = db.prepare('UPDATE pages SET order_index = ? WHERE id = ? AND user_id = ?');
-  order.forEach((id, idx) => update.run(idx, id, req.user.id));
+  order.forEach((id, idx) => update.run(idx, id, req.user.account_id));
   res.json({ ok: true });
 });
 
@@ -103,7 +103,7 @@ router.put('/', (req, res) => {
 
 // Cria elemento em uma página
 router.post('/:id/elements', (req, res) => {
-  const page = getOwnedPage(req.params.id, req.user.id);
+  const page = getOwnedPage(req.params.id, req.user.account_id);
   if (!page) return res.status(404).json({ error: 'Página não encontrada.' });
 
   const {
@@ -155,19 +155,19 @@ router.post('/:id/elements', (req, res) => {
   res.status(201).json({ element });
 });
 
-function getOwnedElement(elementId, userId) {
+function getOwnedElement(elementId, accountId) {
   return db
     .prepare(
       `SELECT e.* FROM elements e
        JOIN pages p ON p.id = e.page_id
        WHERE e.id = ? AND p.user_id = ?`
     )
-    .get(elementId, userId);
+    .get(elementId, accountId);
 }
 
 // Atualiza elemento (posição, tamanho, estilo, conteúdo)
 router.put('/elements/:elId', (req, res) => {
-  const el = getOwnedElement(req.params.elId, req.user.id);
+  const el = getOwnedElement(req.params.elId, req.user.account_id);
   if (!el) return res.status(404).json({ error: 'Elemento não encontrado.' });
 
   const fields = [
@@ -216,7 +216,7 @@ router.put('/elements/:elId', (req, res) => {
 
 // Exclui elemento
 router.delete('/elements/:elId', (req, res) => {
-  const el = getOwnedElement(req.params.elId, req.user.id);
+  const el = getOwnedElement(req.params.elId, req.user.account_id);
   if (!el) return res.status(404).json({ error: 'Elemento não encontrado.' });
   db.prepare('DELETE FROM elements WHERE id = ?').run(el.id);
   res.json({ ok: true });
