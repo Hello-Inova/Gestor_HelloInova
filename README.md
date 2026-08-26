@@ -44,7 +44,7 @@ npm run dev
 
 ## Publicar na Vercel
 
-1. Importe este repositório em [vercel.com/new](https://vercel.com/new). O projeto já inclui um `vercel.json` e um `api/index.js` que apontam explicitamente para a função serverless (ver "Estrutura do projeto" abaixo) — isso evita a detecção automática de "framework Express" da Vercel, que em alguns casos empacota o app incorretamente.
+1. Importe este repositório em [vercel.com/new](https://vercel.com/new). O projeto já inclui um `vercel.json` e um `api/index.js` que apontam explicitamente para a função serverless (ver "Estrutura do projeto" abaixo) — isso evita a detecção automática de "framework Express" da Vercel, que em alguns casos empacota o app incorretamente. **Importante:** em **Settings → General → Build and Deployment → Framework Preset**, deixe definido como **"Other"** (não "Express" nem "Node.js") — assim a Vercel usa só o `api/index.js` como função, sem tentar "adivinhar" outro ponto de entrada por conta própria.
 2. Na aba **Storage** do projeto, adicione um banco **Postgres** (ex: integração com Neon) — isso injeta a variável `DATABASE_URL` automaticamente. Se preferir usar outro provedor de Postgres, defina `DATABASE_URL` manualmente em **Settings → Environment Variables**.
 3. Ainda em **Environment Variables**, defina: `JWT_SECRET` (uma string aleatória longa), `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`.
 4. Faça o deploy. O schema do banco é criado automaticamente na primeira requisição (não é preciso rodar migração manual).
@@ -56,7 +56,6 @@ helloinova-manager/
 ├── vercel.json           # encaminha toda requisição para a função em api/index.js
 ├── api/
 │   └── index.js          # função serverless usada pela Vercel (reexporta server/index.js)
-├── server.js             # ponto de entrada local (reexporta server/index.js)
 ├── server/
 │   ├── index.js         # bootstrap do Express, rotas e arquivos estáticos
 │   ├── db.js             # schema e conexão Postgres
