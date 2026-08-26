@@ -1,3 +1,5 @@
+require('dotenv').config(); // carrega .env (segredos: JWT_SECRET, RESEND_API_KEY, etc.)
+
 const path = require('node:path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -7,16 +9,19 @@ require('./db'); // garante criação do schema na inicialização
 const authRoutes = require('./routes/auth');
 const pageRoutes = require('./routes/pages');
 const systemRoutes = require('./routes/systems');
+const dashboardRoutes = require('./routes/dashboard');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '3mb' })); // permite anexar a logo do sistema (base64) no Gestor de Sistemas
+// Limite maior para caber o anexo de contrato (base64) além da logo do sistema.
+app.use(express.json({ limit: '8mb' }));
 app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/pages', pageRoutes);
 app.use('/api/systems', systemRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Frontend estático
 const CLIENT_DIR = path.join(__dirname, '..', 'client', 'public');
@@ -31,7 +36,7 @@ app.get(/^(?!\/api).*/, (req, res) => {
 app.use((err, req, res, next) => {
   console.error(err);
   if (err.type === 'entity.too.large' || err.status === 413) {
-    return res.status(413).json({ error: 'Arquivo muito grande. Envie uma imagem menor (até ~1MB).' });
+    return res.status(413).json({ error: 'Arquivo muito grande. Envie um arquivo menor.' });
   }
   // Erros de I/O do SQLite (ex: "disk I/O error", "database is locked") costumam
   // acontecer quando a pasta do projeto está sincronizada por OneDrive/Google

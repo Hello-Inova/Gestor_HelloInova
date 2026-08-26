@@ -75,6 +75,26 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  -- Códigos de verificação por e-mail (cadastro e login em duas etapas).
+  CREATE TABLE IF NOT EXISTS verification_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    purpose TEXT NOT NULL, -- 'register' | 'login'
+    user_id INTEGER,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    consumed INTEGER NOT NULL DEFAULT 0,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Registro de tentativas de login por IP, usado para a trava de força bruta.
+  CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // Migrações leves: adicionam colunas em bancos criados antes dessa versão.
@@ -92,6 +112,9 @@ const migrations = [
   "ALTER TABLE systems ADD COLUMN contact_name TEXT DEFAULT ''",
   "ALTER TABLE systems ADD COLUMN contact_whatsapp TEXT DEFAULT ''",
   "ALTER TABLE systems ADD COLUMN contact_email TEXT DEFAULT ''",
+  "ALTER TABLE systems ADD COLUMN contract_file TEXT DEFAULT ''",
+  "ALTER TABLE systems ADD COLUMN contract_file_name TEXT DEFAULT ''",
+  'ALTER TABLE users ADD COLUMN dashboard_seeded INTEGER NOT NULL DEFAULT 0',
 ];
 for (const sql of migrations) {
   try {
@@ -99,6 +122,21 @@ for (const sql of migrations) {
   } catch (e) {
     // coluna já existe — ignora
   }
+}
+
+// A coluna "email_verified" precisa de um tratamento especial: ela só pode
+// ser adicionada UMA vez (o ALTER TABLE falha nas execuções seguintes, o
+// que é o sinal de que a coluna já existe). Aproveitamos esse exato
+// momento — logo após criá-la pela primeira vez — para marcar todas as
+// contas que já existiam como verificadas, já que elas já usavam o
+// sistema normalmente antes dessa exigência existir. Em qualquer execução
+// seguinte o ALTER TABLE falha e pulamos o UPDATE, preservando contas
+// com verificação pendente de verdade.
+try {
+  db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
+  db.exec('UPDATE users SET email_verified = 1');
+} catch (e) {
+  // coluna já existia — não mexe no estado de verificação de ninguém
 }
 
 // Migra a antiga assinatura única (subscription_name/value/due_date) para a
@@ -132,6 +170,30 @@ try {
     WHERE systems_seeded = 0
       AND id IN (SELECT DISTINCT user_id FROM pages WHERE type = 'systems')
   `);
+} catch (e) {
+  // ignora se as tabelas ainda não existirem na primeira execução
+}
+
+// Cria o módulo fixo "Dashboard" para contas que ainda não têm um (ex:
+// contas criadas antes desse módulo existir). Roda em toda inicialização,
+// mas é idempotente: uma vez que todo usuário tenha o módulo, a consulta
+// não retorna ninguém e o bloco não faz nada.
+try {
+  const usersWithoutDashboard = db
+    .prepare(
+      `SELECT id FROM users WHERE id NOT IN (SELECT DISTINCT user_id FROM pages WHERE type = 'dashboard')`
+    )
+    .all();
+  for (const u of usersWithoutDashboard) {
+    const maxOrder = db.prepare('SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?').get(u.id).m;
+    db.prepare('INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)').run(
+      u.id,
+      'Dashboard',
+      'dashboard',
+      maxOrder + 1
+    );
+  }
+  db.exec('UPDATE users SET dashboard_seeded = 1 WHERE dashboard_seeded = 0');
 } catch (e) {
   // ignora se as tabelas ainda não existirem na primeira execução
 }

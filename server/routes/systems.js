@@ -2,13 +2,14 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
 const { encrypt, decrypt } = require('../crypto');
+const { SYSTEM_CATEGORIES } = require('../categories');
 
 const router = express.Router();
 router.use(requireAuth);
 
 const MAX_LOGO_LENGTH = 1_500_000; // ~1.1MB de imagem original (base64 infla ~33%)
+const MAX_CONTRACT_LENGTH = 7_000_000; // ~5.2MB de arquivo original (base64 infla ~33%)
 
-const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,6 +49,8 @@ function toPublic(row) {
     contact_name: row.contact_name || '',
     contact_whatsapp: row.contact_whatsapp || '',
     contact_email: row.contact_email || '',
+    contract_file: row.contract_file || '',
+    contract_file_name: row.contract_file_name || '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -62,6 +65,13 @@ function validLogo(logo) {
   if (typeof logo !== 'string') return false;
   if (logo.length > MAX_LOGO_LENGTH) return false;
   return /^data:image\//.test(logo);
+}
+
+function validContractFile(file) {
+  if (!file) return true;
+  if (typeof file !== 'string') return false;
+  if (file.length > MAX_CONTRACT_LENGTH) return false;
+  return /^data:(application\/pdf|image\/)/.test(file);
 }
 
 // Normaliza e valida a lista de categorias vinda do cliente.
@@ -145,10 +155,14 @@ router.post('/', (req, res) => {
     name, url, repo_url = '', login_email = '', login_password = '', logo = '',
     categories, subscriptions,
     contact_name = '', contact_whatsapp = '', contact_email = '',
+    contract_file = '', contract_file_name = '',
   } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
   if (!url || !url.trim()) return res.status(400).json({ error: 'Informe o link de acesso.' });
   if (!validLogo(logo)) return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
+  if (!validContractFile(contract_file)) {
+    return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
+  }
 
   const cat = parseCategories(categories);
   if (!cat.ok) return res.status(400).json({ error: cat.error });
@@ -161,13 +175,14 @@ router.post('/', (req, res) => {
     .prepare(
       `INSERT INTO systems
         (user_id, name, url, repo_url, login_email, login_password_enc, logo, categories, subscriptions,
-         contact_name, contact_whatsapp, contact_email)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+         contact_name, contact_whatsapp, contact_email, contract_file, contract_file_name)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     )
     .run(
       req.user.id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
       JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || []),
-      contact.contact_name, contact.contact_whatsapp, contact.contact_email
+      contact.contact_name, contact.contact_whatsapp, contact.contact_email,
+      contract_file || '', (contract_file_name || '').trim().slice(0, 200)
     );
 
   const row = db.prepare('SELECT * FROM systems WHERE id = ?').get(info.lastInsertRowid);
@@ -183,9 +198,13 @@ router.put('/:id', (req, res) => {
     name, url, repo_url, login_email, login_password, logo,
     categories, subscriptions,
     contact_name, contact_whatsapp, contact_email,
+    contract_file, contract_file_name,
   } = req.body || {};
   if (logo !== undefined && !validLogo(logo)) {
     return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
+  }
+  if (contract_file !== undefined && !validContractFile(contract_file)) {
+    return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
   }
   const cat = parseCategories(categories);
   if (!cat.ok) return res.status(400).json({ error: cat.error });
@@ -207,14 +226,19 @@ router.put('/:id', (req, res) => {
   const newLogo = typeof logo === 'string' ? logo : row.logo;
   const newCategories = cat.categories === undefined ? row.categories : JSON.stringify(cat.categories);
   const newSubscriptions = subs.subscriptions === undefined ? row.subscriptions : JSON.stringify(subs.subscriptions);
+  const newContractFile = typeof contract_file === 'string' ? contract_file : row.contract_file;
+  const newContractFileName =
+    typeof contract_file_name === 'string' ? contract_file_name.trim().slice(0, 200) : row.contract_file_name;
 
   db.prepare(
     `UPDATE systems SET name=?, url=?, repo_url=?, login_email=?, login_password_enc=?, logo=?,
        categories=?, subscriptions=?, contact_name=?, contact_whatsapp=?, contact_email=?,
+       contract_file=?, contract_file_name=?,
        updated_at=datetime('now') WHERE id=?`
   ).run(
     newName, newUrl, newRepoUrl, newEmail, newPassEnc, newLogo, newCategories, newSubscriptions,
-    contact.contact_name, contact.contact_whatsapp, contact.contact_email, row.id
+    contact.contact_name, contact.contact_whatsapp, contact.contact_email,
+    newContractFile, newContractFileName, row.id
   );
 
   const updated = db.prepare('SELECT * FROM systems WHERE id = ?').get(row.id);

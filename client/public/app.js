@@ -16,6 +16,8 @@
     sidebarTab: 'pages', // 'pages' | 'props'
     mode: 'edit', // 'edit' | 'preview'
     authView: 'login', // 'login' | 'register'
+    authStep: 'form', // 'form' | 'code'
+    authPending: null, // { email, purpose: 'register'|'login' }
     sidebarOpen: false,
     booted: false,
     systemModal: null, // { mode: 'create'|'edit', system?: {...} }
@@ -38,9 +40,57 @@
     });
     let data = {};
     try { data = await res.json(); } catch (e) { /* sem corpo */ }
-    if (!res.ok) throw new Error(data.error || 'Erro na requisição.');
+
+    // Sessão derrubada (inatividade ou token inválido) enquanto achávamos
+    // que o usuário estava logado: volta para a tela de login com um aviso.
+    if (res.status === 401 && state.user && path !== '/auth/logout') {
+      state.user = null;
+      state.pages = [];
+      state.systems = null;
+      state.selectedPageId = null;
+      state.selectedElementId = null;
+      clearTimeout(inactivityTimer);
+      toast(data.error || 'Sessão expirada. Faça login novamente.', true);
+      render();
+    }
+
+    if (!res.ok) {
+      const err = new Error(data.error || 'Erro na requisição.');
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
     return data;
   }
+
+  // ---------------- Logout automático por inatividade (client-side) ----------------
+  // Espelha, no navegador, a janela deslizante de 15 minutos do servidor:
+  // sem nenhuma interação do usuário nesse período, encerra a sessão
+  // proativamente (além do servidor já rejeitar o próximo request via 401).
+  const INACTIVITY_LIMIT_MS = 15 * 60 * 1000;
+  let inactivityTimer = null;
+
+  function resetInactivityTimer() {
+    clearTimeout(inactivityTimer);
+    if (!state.user) return;
+    inactivityTimer = setTimeout(handleInactivityLogout, INACTIVITY_LIMIT_MS);
+  }
+
+  async function handleInactivityLogout() {
+    if (!state.user) return;
+    await api('/auth/logout', { method: 'POST' }).catch(() => {});
+    state.user = null;
+    state.pages = [];
+    state.systems = null;
+    state.selectedPageId = null;
+    state.selectedElementId = null;
+    toast('Sessão encerrada após 15 minutos de inatividade.', true);
+    render();
+  }
+
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach((evt) => {
+    document.addEventListener(evt, resetInactivityTimer, { passive: true });
+  });
 
   function el(tag, attrs, children) {
     const node = document.createElement(tag);
@@ -84,6 +134,11 @@
       search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
       mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
       whatsapp: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+      file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/>',
+      download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
+      dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+      cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01"/><path d="M18 12h.01"/>',
+      shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
   }
@@ -136,6 +191,7 @@
       const { user } = await api('/auth/me');
       state.user = user;
       await Promise.all([loadPages(), loadSystems()]);
+      resetInactivityTimer();
     } catch (e) {
       state.user = null;
     }
@@ -191,10 +247,8 @@
   // ================================================================
   // TELA DE AUTENTICAÇÃO
   // ================================================================
-  function renderAuthScreen() {
-    const isLogin = state.authView === 'login';
-
-    const brand = el('div', { class: 'auth-brand' }, [
+  function authBrand() {
+    return el('div', { class: 'auth-brand' }, [
       el('img', { class: 'brand-mark', src: '/assets/logo-mark.png', alt: 'Hello Inova' }),
       el('div', { class: 'brand-wordmark' }, ['Hello', el('span', {}, ['Inova'])]),
       el('div', { class: 'brand-tagline' }, ['Da mente às telas']),
@@ -202,6 +256,15 @@
         'Gerencie, em um só lugar, todos os sistemas administrados pela Hello Inova: crie páginas, monte telas e organize seus painéis com liberdade total.',
       ]),
     ]);
+  }
+
+  function renderAuthScreen() {
+    return state.authStep === 'code' ? renderAuthCodeScreen() : renderAuthFormScreen();
+  }
+
+  // ---- Etapa 1: e-mail/senha (login) ou nome/e-mail/senha (cadastro) ----
+  function renderAuthFormScreen() {
+    const isLogin = state.authView === 'login';
 
     let errorBox = null;
     let submitBtn = null;
@@ -231,15 +294,27 @@
         submitBtn.textContent = isLogin ? 'Entrando…' : 'Criando conta…';
         try {
           if (isLogin) {
-            const { user } = await api('/auth/login', { method: 'POST', body: { email, password } });
-            state.user = user;
+            const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+            // Credenciais corretas: sempre pede o código de verificação por e-mail.
+            state.authPending = { email: data.email, purpose: data.purpose };
+            state.authStep = 'code';
+            render();
           } else {
-            const { user } = await api('/auth/register', { method: 'POST', body: { name, email, password } });
-            state.user = user;
+            const data = await api('/auth/register', { method: 'POST', body: { name, email, password } });
+            state.authPending = { email: data.email, purpose: data.purpose };
+            state.authStep = 'code';
+            render();
           }
-          await Promise.all([loadPages(), loadSystems()]);
-          render();
         } catch (err) {
+          // Conta existe mas nunca confirmou o e-mail: manda direto para a
+          // tela de código (o servidor já reenviou um código novo).
+          if (err.data && err.data.needs_verification) {
+            state.authPending = { email: err.data.email, purpose: err.data.purpose };
+            state.authStep = 'code';
+            render();
+            toast(err.message);
+            return;
+          }
           submitBtn.disabled = false;
           submitBtn.textContent = isLogin ? 'Entrar' : 'Criar conta';
           const box = el('div', { class: 'auth-error' }, [err.message]);
@@ -268,7 +343,93 @@
       ]),
     ]);
 
-    return el('div', { class: 'auth-screen' }, [brand, el('div', { class: 'auth-form-wrap' }, [card])]);
+    return el('div', { class: 'auth-screen' }, [authBrand(), el('div', { class: 'auth-form-wrap' }, [card])]);
+  }
+
+  // ---- Etapa 2: código de verificação recebido por e-mail (2FA) ----
+  function renderAuthCodeScreen() {
+    const pending = state.authPending || {};
+    const isRegister = pending.purpose === 'register';
+
+    let errorBox = null;
+    let submitBtn = null;
+    let resendBtn = null;
+
+    const codeInput = el('input', {
+      type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '6',
+      placeholder: '000000', class: 'code-input', id: 'f-code',
+    });
+    codeInput.addEventListener('input', () => {
+      codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
+    });
+
+    const form = el('form', {
+      onsubmit: async (ev) => {
+        ev.preventDefault();
+        if (errorBox) errorBox.remove();
+        const code = codeInput.value.trim();
+        if (!code) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Confirmando…';
+        try {
+          const path = isRegister ? '/auth/verify-email' : '/auth/verify-login';
+          const { user } = await api(path, { method: 'POST', body: { email: pending.email, code } });
+          state.user = user;
+          state.authPending = null;
+          state.authStep = 'form';
+          await Promise.all([loadPages(), loadSystems()]);
+          resetInactivityTimer();
+          render();
+        } catch (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Confirmar código';
+          const box = el('div', { class: 'auth-error' }, [err.message]);
+          form.insertBefore(box, form.firstChild);
+          errorBox = box;
+        }
+      },
+    }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Código de 6 dígitos']), codeInput]),
+    ]);
+
+    submitBtn = el('button', { type: 'submit', class: 'btn btn-primary btn-block' }, ['Confirmar código']);
+    form.appendChild(submitBtn);
+
+    resendBtn = el('button', {
+      type: 'button', class: 'btn btn-ghost btn-block',
+      style: 'margin-top:10px',
+      onclick: async () => {
+        resendBtn.disabled = true;
+        try {
+          await api('/auth/resend-code', { method: 'POST', body: { email: pending.email, purpose: pending.purpose } });
+          toast('Enviamos um novo código para ' + pending.email + '.');
+        } catch (err) {
+          toast(err.message, true);
+        } finally {
+          resendBtn.disabled = false;
+        }
+      },
+    }, ['Reenviar código']);
+
+    const backBtn = el('button', {
+      type: 'button',
+      onclick: () => { state.authPending = null; state.authStep = 'form'; render(); },
+    }, ['Voltar']);
+
+    const card = el('div', { class: 'auth-card' }, [
+      el('h1', {}, ['Verifique seu e-mail']),
+      el('p', { class: 'sub' }, [
+        isRegister
+          ? 'Enviamos um código de 6 dígitos para ' + (pending.email || 'seu e-mail') + ' para confirmar seu cadastro.'
+          : 'Por segurança, enviamos um código de 6 dígitos para ' + (pending.email || 'seu e-mail') + ' para concluir o login.',
+      ]),
+      form,
+      resendBtn,
+      el('div', { class: 'auth-switch' }, ['Errou o e-mail ou a senha? ', backBtn]),
+    ]);
+
+    return el('div', { class: 'auth-screen' }, [authBrand(), el('div', { class: 'auth-form-wrap' }, [card])]);
   }
 
   // ================================================================
@@ -329,24 +490,15 @@
       header.querySelector('#sidebar-close-btn').style.display = 'inline-flex';
     }
 
+    // Menu fixo: os módulos (Gestor de Sistemas, Dashboard) são criados
+    // automaticamente para a conta e não são renomeáveis/removíveis pelo
+    // usuário, então o menu mostra só a lista — sem abas nem edição.
     const tabs = el('div', { class: 'sidebar-tabs' }, [
-      el('button', {
-        class: 'sidebar-tab' + (state.sidebarTab === 'pages' ? ' active' : ''),
-        onclick: () => { state.sidebarTab = 'pages'; render(); },
-      }, ['Módulos']),
-      el('button', {
-        class: 'sidebar-tab' + (state.sidebarTab === 'props' ? ' active' : ''),
-        disabled: !state.selectedElementId,
-        onclick: () => { if (state.selectedElementId) { state.sidebarTab = 'props'; render(); } },
-      }, ['Elemento']),
+      el('div', { class: 'sidebar-tab active', style: 'cursor:default' }, ['Módulos']),
     ]);
 
     const body = el('div', { class: 'sidebar-body' });
-    if (state.sidebarTab === 'pages') {
-      body.appendChild(buildPageList());
-    } else {
-      body.appendChild(buildPropsPanel());
-    }
+    body.appendChild(buildPageList());
 
     const footer = el('div', { class: 'sidebar-footer' }, [
       el('button', {
@@ -367,8 +519,10 @@
           await api('/auth/logout', { method: 'POST' }).catch(() => {});
           state.user = null;
           state.pages = [];
+          state.systems = null;
           state.selectedPageId = null;
           state.selectedElementId = null;
+          clearTimeout(inactivityTimer);
           render();
         },
         html: icon('logout'),
@@ -388,55 +542,25 @@
 
     state.pages.forEach((page, idx) => {
       const isActive = page.id === state.selectedPageId;
-      const nameInput = el('input', {
-        class: 'name-input',
-        value: page.name,
-        readonly: true,
-        title: 'Clique duas vezes para editar o nome',
-      });
-
-      nameInput.addEventListener('dblclick', () => {
-        nameInput.removeAttribute('readonly');
-        nameInput.classList.add('editing');
-        nameInput.focus();
-        nameInput.select();
-      });
-
-      async function commitName() {
-        nameInput.setAttribute('readonly', 'true');
-        nameInput.classList.remove('editing');
-        const newName = nameInput.value.trim() || page.name;
-        nameInput.value = newName;
-        if (newName !== page.name) {
-          page.name = newName;
-          try {
-            await api('/pages/' + page.id, { method: 'PUT', body: { name: newName } });
-            toast('Nome do módulo atualizado.');
-          } catch (err) {
-            toast(err.message, true);
-          }
-        }
-      }
-
-      nameInput.addEventListener('blur', commitName);
-      nameInput.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter') { ev.preventDefault(); nameInput.blur(); }
-        if (ev.key === 'Escape') { nameInput.value = page.name; nameInput.blur(); }
-      });
+      // Módulos são fixos (Gestor de Sistemas, Dashboard) — o nome não é
+      // editável pelo usuário, só a ordem pode ser ajustada. Usamos um
+      // <span> (e não um <input disabled>) porque um controle de formulário
+      // desabilitado não dispara/propaga o evento de clique no Chrome —
+      // isso fazia o toque no meio da linha (onde o campo ficava) não
+      // selecionar o módulo.
+      const nameLabel = el('span', { class: 'name-input' }, [page.name]);
 
       const item = el('li', {
         class: 'page-item' + (isActive ? ' active' : ''),
-        onclick: (ev) => {
-          if (ev.target === nameInput) return;
+        onclick: () => {
           state.selectedPageId = page.id;
           state.selectedElementId = null;
-          state.sidebarTab = 'pages';
           state.sidebarOpen = false;
           render();
         },
       }, [
         el('span', { class: 'dot' }),
-        nameInput,
+        nameLabel,
         el('div', { class: 'row-actions' }, [
           el('button', {
             class: 'icon-btn', title: 'Mover para cima',
@@ -448,29 +572,6 @@
             onclick: async (ev) => { ev.stopPropagation(); await movePage(page.id, 1); },
             html: icon('down'),
           }),
-          el('button', {
-            class: 'icon-btn', title: 'Renomear',
-            onclick: (ev) => { ev.stopPropagation(); nameInput.removeAttribute('readonly'); nameInput.classList.add('editing'); nameInput.focus(); nameInput.select(); },
-            html: icon('edit'),
-          }),
-          el('button', {
-            class: 'icon-btn danger', title: 'Excluir módulo',
-            onclick: async (ev) => {
-              ev.stopPropagation();
-              if (state.pages.length <= 1) { toast('É necessário manter ao menos um módulo.', true); return; }
-              const warn = page.type === 'systems'
-                ? 'Excluir o módulo "' + page.name + '"? Os sistemas cadastrados nele continuam salvos, mas o módulo não volta sozinho — você pode recriar um novo módulo quando quiser.'
-                : 'Excluir o módulo "' + page.name + '"? Todos os elementos dele serão perdidos.';
-              if (!confirm(warn)) return;
-              try {
-                await api('/pages/' + page.id, { method: 'DELETE' });
-                await loadPages();
-                state.selectedElementId = null;
-                render();
-              } catch (err) { toast(err.message, true); }
-            },
-            html: icon('trash'),
-          }),
         ]),
       ]);
 
@@ -478,20 +579,6 @@
     });
 
     wrap.appendChild(list);
-
-    wrap.appendChild(el('button', {
-      class: 'btn btn-ghost btn-block new-page-btn',
-      onclick: async () => {
-        const name = prompt('Nome do novo módulo:', 'Novo módulo');
-        if (!name || !name.trim()) return;
-        try {
-          const { page } = await api('/pages', { method: 'POST', body: { name: name.trim() } });
-          await loadPages();
-          state.selectedPageId = page.id;
-          render();
-        } catch (err) { toast(err.message, true); }
-      },
-    }, [el('span', { html: icon('plus') }), ' Novo módulo']));
 
     return wrap;
   }
@@ -669,6 +756,7 @@
     const main = el('div', { class: 'main' });
     const page = currentPage();
     const isSystems = page && page.type === 'systems';
+    const isDashboard = page && page.type === 'dashboard';
 
     const header = el('div', { class: 'main-header' }, [
       el('div', { class: 'page-title-wrap' }, [
@@ -679,7 +767,7 @@
           class: 'btn btn-primary btn-sm',
           onclick: () => openSystemModal('create'),
         }, [el('span', { html: icon('plus') }), ' Novo Sistema']),
-      ]) : el('div', { class: 'toolbox' }, [
+      ]) : (isDashboard ? null : el('div', { class: 'toolbox' }, [
         toolboxBtn('type', 'Texto', () => addElement('label')),
         toolboxBtn('input', 'Campo', () => addElement('input')),
         toolboxBtn('button', 'Botão', () => addElement('button')),
@@ -688,13 +776,18 @@
           el('button', { class: state.mode === 'edit' ? 'active' : '', onclick: () => { state.mode = 'edit'; render(); } }, ['Editar']),
           el('button', { class: state.mode === 'preview' ? 'active' : '', onclick: () => { state.mode = 'preview'; state.selectedElementId = null; render(); } }, ['Visualizar']),
         ]),
-      ]),
+      ])),
     ]);
 
     main.appendChild(header);
 
     if (isSystems) {
       main.appendChild(buildSystemsManager());
+      return main;
+    }
+
+    if (isDashboard) {
+      main.appendChild(buildDashboard());
       return main;
     }
 
@@ -716,6 +809,73 @@
     canvasScroll.appendChild(canvas);
     main.appendChild(canvasScroll);
     return main;
+  }
+
+  // ---------------- Dashboard Gerencial/Financeiro (módulo especial) ----------------
+  function buildDashboard() {
+    const wrap = el('div', { class: 'canvas-scroll' });
+    const inner = el('div', { class: 'dashboard' }, [
+      el('div', { class: 'dashboard-loading' }, ['Carregando resumo…']),
+    ]);
+    wrap.appendChild(inner);
+
+    api('/dashboard/summary')
+      .then((data) => {
+        inner.innerHTML = '';
+        inner.appendChild(buildDashboardContent(data));
+      })
+      .catch((err) => {
+        inner.innerHTML = '';
+        inner.appendChild(el('div', { class: 'dashboard-error' }, ['Não foi possível carregar o resumo: ' + err.message]));
+      });
+
+    return wrap;
+  }
+
+  function buildDashboardContent(data) {
+    const cards = el('div', { class: 'dashboard-cards' }, [
+      dashboardStatCard('server', 'Sistemas cadastrados', String(data.systems_total || 0)),
+      dashboardStatCard('layers', 'Assinaturas ativas', String(data.subscriptions_total_count || 0)),
+      dashboardStatCard('cash', 'Valor total em assinaturas', formatCurrencyBRL(data.subscriptions_total_value) || 'R$ 0,00'),
+    ]);
+
+    const categories = data.categories || [];
+    const catRows = categories.map((c) => dashboardCategoryRow(c.category, c.count, data.systems_total || 0));
+
+    const catCard = el('div', { class: 'dashboard-card dashboard-cat-card' }, [
+      el('h3', {}, [el('span', { html: icon('layers') }), ' Sistemas por categoria']),
+      catRows.length
+        ? el('div', { class: 'dashboard-cat-list' }, catRows)
+        : el('div', { class: 'subs-empty' }, ['Nenhum sistema cadastrado ainda.']),
+      data.uncategorized_count
+        ? el('div', { class: 'dashboard-cat-uncategorized' }, ['Sem categoria: ' + data.uncategorized_count])
+        : null,
+    ]);
+
+    return el('div', {}, [cards, catCard]);
+  }
+
+  function dashboardStatCard(iconName, label, value) {
+    return el('div', { class: 'dashboard-card dashboard-stat-card' }, [
+      el('div', { class: 'dashboard-stat-icon', html: icon(iconName) }),
+      el('div', { class: 'dashboard-stat-body' }, [
+        el('div', { class: 'dashboard-stat-value' }, [value]),
+        el('div', { class: 'dashboard-stat-label' }, [label]),
+      ]),
+    ]);
+  }
+
+  function dashboardCategoryRow(name, count, total) {
+    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+    return el('div', { class: 'dashboard-cat-row' }, [
+      el('div', { class: 'dashboard-cat-row-top' }, [
+        el('span', {}, [name]),
+        el('span', { class: 'dashboard-cat-count' }, [String(count)]),
+      ]),
+      el('div', { class: 'dashboard-cat-bar' }, [
+        el('div', { class: 'dashboard-cat-bar-fill', style: 'width:' + pct + '%' }),
+      ]),
+    ]);
   }
 
   // ---------------- Gestor de Sistemas (módulo especial) ----------------
@@ -1101,6 +1261,98 @@
     ]);
   }
 
+  // ---------------- Anexo de contrato ----------------
+  // Mesmo padrão do upload de logo (base64 embutido), mas aceitando PDF ou
+  // imagem e com um limite maior (~5MB de arquivo original).
+  function contractChip(fileData, fileName) {
+    const isPdf = /^data:application\/pdf/.test(fileData || '');
+    return el('span', { class: 'contract-file-chip' }, [
+      el('span', { html: icon(isPdf ? 'file' : 'image') }),
+      el('span', { class: 'contract-file-name' }, [fileName || 'Arquivo anexado']),
+    ]);
+  }
+
+  // Editável — usado nos modais de criação/edição.
+  function buildContractFileField(sys) {
+    sys = sys || {};
+    let fileData = sys.contract_file || '';
+    let fileName = sys.contract_file_name || '';
+
+    const preview = el('div', { class: 'contract-preview' }, [
+      fileData ? contractChip(fileData, fileName) : el('span', { class: 'contract-empty-hint' }, ['Nenhum arquivo anexado.']),
+    ]);
+
+    const fileInput = el('input', { type: 'file', accept: 'application/pdf,image/*' });
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (file.size > 5_200_000) {
+        toast('Arquivo muito grande. Escolha um arquivo de até ~5MB.', true);
+        fileInput.value = '';
+        return;
+      }
+      if (!/^application\/pdf$/.test(file.type) && !/^image\//.test(file.type)) {
+        toast('Envie um arquivo PDF ou imagem.', true);
+        fileInput.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        fileData = String(reader.result);
+        fileName = file.name || 'contrato';
+        preview.innerHTML = '';
+        preview.appendChild(contractChip(fileData, fileName));
+      };
+      reader.readAsDataURL(file);
+    });
+
+    const pickBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => fileInput.click() }, [
+      el('span', { html: icon('upload') }), ' Anexar contrato',
+    ]);
+    const removeBtn = el('button', {
+      class: 'btn btn-ghost btn-sm', type: 'button',
+      onclick: () => {
+        fileData = ''; fileName = ''; fileInput.value = '';
+        preview.innerHTML = '';
+        preview.appendChild(el('span', { class: 'contract-empty-hint' }, ['Nenhum arquivo anexado.']));
+      },
+    }, ['Remover']);
+
+    const container = el('div', { class: 'field' }, [
+      el('label', {}, ['Contrato (PDF ou imagem, até 5MB)']),
+      el('div', { class: 'logo-upload contract-upload' }, [
+        preview,
+        el('div', { class: 'logo-upload-actions' }, [fileInput, pickBtn, removeBtn]),
+      ]),
+    ]);
+
+    return { container, getFile: () => fileData, getFileName: () => fileName };
+  }
+
+  // Somente leitura — usado no modal Visualizador.
+  function buildContractSection(sys) {
+    const fileData = sys.contract_file || '';
+    const fileName = sys.contract_file_name || '';
+
+    if (!fileData) {
+      return el('div', {}, [
+        el('div', { class: 'field-section-title' }, ['Contrato']),
+        el('div', { class: 'subs-empty' }, ['Nenhum contrato anexado.']),
+      ]);
+    }
+
+    return el('div', {}, [
+      el('div', { class: 'field-section-title' }, ['Contrato']),
+      el('div', { class: 'contract-card' }, [
+        contractChip(fileData, fileName),
+        el('a', {
+          class: 'btn btn-ghost btn-sm contact-btn',
+          href: fileData, download: fileName || 'contrato',
+        }, [el('span', { html: icon('download') }), ' Baixar']),
+      ]),
+    ]);
+  }
+
   function buildViewModalView(sys) {
     const categories = Array.isArray(sys.categories) ? sys.categories : [];
 
@@ -1170,6 +1422,7 @@
         viewField('Atualizado em', sys.updated_at ? formatDateBR(sys.updated_at) : '—'),
       ]),
       buildContactSection(sys),
+      buildContractSection(sys),
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       buildSubscriptionsView(sys.subscriptions),
     ]);
@@ -1225,6 +1478,7 @@
 
     const subsEditor = buildSubscriptionsEditor(sys.subscriptions || []);
     const contactFields = buildContactFields(sys);
+    const contractField = buildContractFileField(sys);
 
     let logoData = sys.logo || '';
     const logoPreview = el('div', { class: 'logo-preview' }, [
@@ -1286,6 +1540,8 @@
           contact_name: contactFields.nameInput.value.trim(),
           contact_whatsapp: contactFields.whatsappInput.value.trim(),
           contact_email: contactFields.emailInput.value.trim(),
+          contract_file: contractField.getFile(),
+          contract_file_name: contractField.getFileName(),
         };
         if (password) body.login_password = password;
         const res = await api('/systems/' + sys.id, { method: 'PUT', body });
@@ -1314,6 +1570,7 @@
         el('div', { class: 'password-field' }, [passInput, passToggle]),
       ]),
       contactFields.container,
+      contractField.container,
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       subsEditor.container,
       el('div', { class: 'field' }, [
@@ -1365,6 +1622,7 @@
 
     const subsEditor = buildSubscriptionsEditor([]);
     const contactFields = buildContactFields({});
+    const contractField = buildContractFileField({});
 
     const passToggle = el('button', {
       type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
@@ -1430,6 +1688,8 @@
           contact_name: contactFields.nameInput.value.trim(),
           contact_whatsapp: contactFields.whatsappInput.value.trim(),
           contact_email: contactFields.emailInput.value.trim(),
+          contract_file: contractField.getFile(),
+          contract_file_name: contractField.getFileName(),
           login_password: password,
         };
         const res = await api('/systems', { method: 'POST', body });
@@ -1457,6 +1717,7 @@
         el('div', { class: 'password-field' }, [passInput, passToggle]),
       ]),
       contactFields.container,
+      contractField.container,
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       subsEditor.container,
       el('div', { class: 'field' }, [
