@@ -8,7 +8,7 @@ router.use(requireAuth);
 
 const MAX_LOGO_LENGTH = 1_500_000; // ~1.1MB de imagem original (base64 infla ~33%)
 
-const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS'];
+const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function toPublic(row) {

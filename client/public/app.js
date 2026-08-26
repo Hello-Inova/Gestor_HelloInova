@@ -25,7 +25,7 @@
     systemsFilterCategories: [],
   };
 
-  const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS'];
+  const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
 
   // ---------------- API helper ----------------
   async function api(path, opts) {
