@@ -10,6 +10,7 @@ const MAX_LOGO_LENGTH = 1_500_000; // ~1.1MB de imagem original (base64 infla ~3
 
 const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function toPublic(row) {
   let categories = [];
@@ -44,6 +45,9 @@ function toPublic(row) {
     subscriptions,
     subscriptions_total_count: subscriptions.length,
     subscriptions_total_value: subscriptionsTotalValue,
+    contact_name: row.contact_name || '',
+    contact_whatsapp: row.contact_whatsapp || '',
+    contact_email: row.contact_email || '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -108,6 +112,20 @@ function parseSubscriptions(input) {
   return { ok: true, subscriptions };
 }
 
+// Valida os dados de contato do responsável pelo contrato.
+// Retorna { ok, contact_name, contact_whatsapp, contact_email, error }.
+function parseContact(contact_name, contact_whatsapp, contact_email) {
+  const name = typeof contact_name === 'string' ? contact_name.trim() : '';
+  const whatsapp = typeof contact_whatsapp === 'string' ? contact_whatsapp.trim() : '';
+  const emailRaw = typeof contact_email === 'string' ? contact_email.trim() : '';
+
+  if (name.length > 120) return { ok: false, error: 'Nome do responsável muito longo.' };
+  if (whatsapp.length > 30) return { ok: false, error: 'WhatsApp do responsável inválido.' };
+  if (emailRaw && !EMAIL_RE.test(emailRaw)) return { ok: false, error: 'Informe um e-mail de contato válido.' };
+
+  return { ok: true, contact_name: name, contact_whatsapp: whatsapp, contact_email: emailRaw };
+}
+
 // Lista as categorias/tipos de sistema disponíveis para o select do cadastro
 router.get('/categories', (req, res) => {
   res.json({ categories: SYSTEM_CATEGORIES });
@@ -126,6 +144,7 @@ router.post('/', (req, res) => {
   const {
     name, url, repo_url = '', login_email = '', login_password = '', logo = '',
     categories, subscriptions,
+    contact_name = '', contact_whatsapp = '', contact_email = '',
   } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
   if (!url || !url.trim()) return res.status(400).json({ error: 'Informe o link de acesso.' });
@@ -135,16 +154,20 @@ router.post('/', (req, res) => {
   if (!cat.ok) return res.status(400).json({ error: cat.error });
   const subs = parseSubscriptions(subscriptions);
   if (!subs.ok) return res.status(400).json({ error: subs.error });
+  const contact = parseContact(contact_name, contact_whatsapp, contact_email);
+  if (!contact.ok) return res.status(400).json({ error: contact.error });
 
   const info = db
     .prepare(
       `INSERT INTO systems
-        (user_id, name, url, repo_url, login_email, login_password_enc, logo, categories, subscriptions)
-       VALUES (?,?,?,?,?,?,?,?,?)`
+        (user_id, name, url, repo_url, login_email, login_password_enc, logo, categories, subscriptions,
+         contact_name, contact_whatsapp, contact_email)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
     )
     .run(
       req.user.id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
-      JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || [])
+      JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || []),
+      contact.contact_name, contact.contact_whatsapp, contact.contact_email
     );
 
   const row = db.prepare('SELECT * FROM systems WHERE id = ?').get(info.lastInsertRowid);
@@ -159,6 +182,7 @@ router.put('/:id', (req, res) => {
   const {
     name, url, repo_url, login_email, login_password, logo,
     categories, subscriptions,
+    contact_name, contact_whatsapp, contact_email,
   } = req.body || {};
   if (logo !== undefined && !validLogo(logo)) {
     return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
@@ -167,6 +191,12 @@ router.put('/:id', (req, res) => {
   if (!cat.ok) return res.status(400).json({ error: cat.error });
   const subs = parseSubscriptions(subscriptions);
   if (!subs.ok) return res.status(400).json({ error: subs.error });
+  const contact = parseContact(
+    contact_name === undefined ? row.contact_name : contact_name,
+    contact_whatsapp === undefined ? row.contact_whatsapp : contact_whatsapp,
+    contact_email === undefined ? row.contact_email : contact_email
+  );
+  if (!contact.ok) return res.status(400).json({ error: contact.error });
 
   const newName = typeof name === 'string' && name.trim() ? name.trim() : row.name;
   const newUrl = typeof url === 'string' && url.trim() ? url.trim() : row.url;
@@ -180,9 +210,12 @@ router.put('/:id', (req, res) => {
 
   db.prepare(
     `UPDATE systems SET name=?, url=?, repo_url=?, login_email=?, login_password_enc=?, logo=?,
-       categories=?, subscriptions=?,
+       categories=?, subscriptions=?, contact_name=?, contact_whatsapp=?, contact_email=?,
        updated_at=datetime('now') WHERE id=?`
-  ).run(newName, newUrl, newRepoUrl, newEmail, newPassEnc, newLogo, newCategories, newSubscriptions, row.id);
+  ).run(
+    newName, newUrl, newRepoUrl, newEmail, newPassEnc, newLogo, newCategories, newSubscriptions,
+    contact.contact_name, contact.contact_whatsapp, contact.contact_email, row.id
+  );
 
   const updated = db.prepare('SELECT * FROM systems WHERE id = ?').get(row.id);
   res.json({ system: toPublic(updated) });

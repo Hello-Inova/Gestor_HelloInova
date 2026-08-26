@@ -758,6 +758,28 @@ button { font-family: inherit; }
 }
 .hint-box svg { flex-shrink: 0; margin-top: 1px; color: var(--blue-400); }
 
+/* ---- Responsável pelo contrato (contato) ---- */
+.contact-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+.contact-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.contact-name { font-size: 14px; font-weight: 600; color: var(--text-0); }
+.contact-detail { font-size: 12.5px; color: var(--text-2); }
+.contact-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.contact-btn { text-decoration: none; }
+.contact-btn-whatsapp { color: #3ddc84; border-color: rgba(46, 204, 113, 0.3); }
+.contact-btn-whatsapp:hover { background: rgba(46, 204, 113, 0.14); border-color: rgba(46, 204, 113, 0.4); }
+.contact-btn-email { color: var(--blue-400); border-color: rgba(47, 123, 255, 0.3); }
+.contact-btn-email:hover { background: rgba(47, 123, 255, 0.14); border-color: rgba(47, 123, 255, 0.4); }
+
 @media (max-width: 640px) {
   .sysmgr-grid { grid-template-columns: 1fr; }
   .sysmgr-row-main { flex-wrap: wrap; }
@@ -965,31 +987,44 @@ button { font-family: inherit; }
   .subs-remove-btn { justify-self: flex-end; }
 }
 
-/* ---- Visualização (somente leitura, no Visualizador) ---- */
+/* ---- Visualização (somente leitura, no Visualizador) ----
+   A lista sempre mostra 2 linhas de assinatura; a partir da 3ª, o bloco
+   de linhas (".subs-view-rows") ganha rolagem própria — o cabeçalho
+   fica fixo, fora da área que rola. */
 .subs-view-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 260px;
-  overflow-y: auto;
   margin-top: 12px;
+}
+.subs-view-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 86px; /* 2 linhas de 40px + 1 gap de 6px */
+  overflow-y: auto;
   padding-right: 4px;
+  margin-top: 6px;
 }
 .subs-view-row {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
-  padding: 9px 12px;
+  align-items: center;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-0);
   font-size: 13.5px;
   color: var(--text-0);
+  flex-shrink: 0;
 }
 .subs-view-row > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subs-view-header {
   background: transparent;
   border: none;
+  height: auto;
   padding: 0 12px;
   font-size: 11px;
   font-weight: 700;
@@ -1000,7 +1035,15 @@ button { font-family: inherit; }
 
 @media (max-width: 640px) {
   .subs-view-header { display: none; }
-  .subs-view-row { grid-template-columns: 1fr; gap: 2px; }
+  .subs-view-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+    height: auto;
+    min-height: 76px;
+    padding: 9px 12px;
+    align-items: start;
+  }
+  .subs-view-rows { max-height: 158px; /* 2 linhas de ~76px + gap */ }
 }
 
 /* ============================================================

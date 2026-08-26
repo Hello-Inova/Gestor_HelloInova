@@ -89,6 +89,9 @@ const migrations = [
   "ALTER TABLE systems ADD COLUMN subscription_due_date TEXT DEFAULT ''",
   "ALTER TABLE systems ADD COLUMN subscriptions TEXT DEFAULT '[]'",
   "ALTER TABLE systems ADD COLUMN repo_url TEXT DEFAULT ''",
+  "ALTER TABLE systems ADD COLUMN contact_name TEXT DEFAULT ''",
+  "ALTER TABLE systems ADD COLUMN contact_whatsapp TEXT DEFAULT ''",
+  "ALTER TABLE systems ADD COLUMN contact_email TEXT DEFAULT ''",
 ];
 for (const sql of migrations) {
   try {

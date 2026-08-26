@@ -82,6 +82,8 @@
       image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
       user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
       search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
+      mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
+      whatsapp: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
   }
@@ -903,18 +905,23 @@
       return wrap;
     }
 
-    const list = el('div', { class: 'subs-view-list' }, [
-      el('div', { class: 'subs-view-row subs-view-header' }, [
-        el('span', {}, ['Nome']),
-        el('span', {}, ['Valor']),
-        el('span', {}, ['Vencimento']),
-      ]),
-      ...subs.map((s) => el('div', { class: 'subs-view-row' }, [
+    const header = el('div', { class: 'subs-view-row subs-view-header' }, [
+      el('span', {}, ['Nome']),
+      el('span', {}, ['Valor']),
+      el('span', {}, ['Vencimento']),
+    ]);
+    const rows = el(
+      'div',
+      { class: 'subs-view-rows' },
+      subs.map((s) => el('div', { class: 'subs-view-row' }, [
         el('span', {}, [s.name || '—']),
         el('span', {}, [formatCurrencyBRL(s.value) || '—']),
         el('span', {}, [formatDateBR(s.due_date) || '—']),
-      ])),
-    ]);
+      ]))
+    );
+    // A lista exibe sempre 2 linhas; a partir da 3ª, o próprio bloco de
+    // linhas ganha rolagem interna (o cabeçalho fica fixo, fora do scroll).
+    const list = el('div', { class: 'subs-view-list' }, [header, rows]);
     wrap.appendChild(list);
     return wrap;
   }
@@ -1017,6 +1024,83 @@
     return { container, getSubscriptions, hasInvalidValue };
   }
 
+  // ---------------- Contato do responsável pelo contrato ----------------
+  // Extrai só os dígitos do WhatsApp informado, para montar o link wa.me
+  // (aceita qualquer formatação: espaços, parênteses, traços, +55 etc.).
+  function whatsappDigits(raw) {
+    return (raw || '').replace(/\D/g, '');
+  }
+
+  // Campos de contato reutilizados no cadastro e na edição de sistemas.
+  // Retorna { container, nameInput, whatsappInput, emailInput }.
+  function buildContactFields(sys) {
+    sys = sys || {};
+    const nameInput = el('input', {
+      type: 'text', placeholder: 'Ex: Maria Souza', value: sys.contact_name || '',
+    });
+    const whatsappInput = el('input', {
+      type: 'text', placeholder: '(11) 91234-5678', value: sys.contact_whatsapp || '',
+    });
+    const emailInput = el('input', {
+      type: 'text', placeholder: 'responsavel@empresa.com', value: sys.contact_email || '',
+    });
+
+    const container = el('div', {}, [
+      el('div', { class: 'field-section-title' }, ['Responsável pelo contrato']),
+      el('div', { class: 'field' }, [el('label', {}, ['Nome do responsável']), nameInput]),
+      el('div', { class: 'sysmgr-grid' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['WhatsApp']), whatsappInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['E-mail de contato']), emailInput]),
+      ]),
+    ]);
+
+    return { container, nameInput, whatsappInput, emailInput };
+  }
+
+  // Somente leitura — usado no modal Visualizador. Mostra nome do
+  // responsável e, quando cadastrados, botões de WhatsApp e E-mail
+  // para contatá-lo diretamente.
+  function buildContactSection(sys) {
+    const name = (sys.contact_name || '').trim();
+    const whatsapp = (sys.contact_whatsapp || '').trim();
+    const email = (sys.contact_email || '').trim();
+
+    if (!name && !whatsapp && !email) {
+      return el('div', {}, [
+        el('div', { class: 'field-section-title' }, ['Responsável pelo contrato']),
+        el('div', { class: 'subs-empty' }, ['Nenhum responsável cadastrado.']),
+      ]);
+    }
+
+    const actions = [];
+    const digits = whatsappDigits(whatsapp);
+    if (digits) {
+      actions.push(el('a', {
+        class: 'btn btn-ghost btn-sm contact-btn contact-btn-whatsapp',
+        href: 'https://wa.me/' + digits,
+        target: '_blank', rel: 'noopener',
+      }, [el('span', { html: icon('whatsapp') }), ' WhatsApp']));
+    }
+    if (email) {
+      actions.push(el('a', {
+        class: 'btn btn-ghost btn-sm contact-btn contact-btn-email',
+        href: 'mailto:' + email,
+      }, [el('span', { html: icon('mail') }), ' E-mail']));
+    }
+
+    return el('div', {}, [
+      el('div', { class: 'field-section-title' }, ['Responsável pelo contrato']),
+      el('div', { class: 'contact-card' }, [
+        el('div', { class: 'contact-info' }, [
+          el('div', { class: 'contact-name' }, [name || 'Responsável não informado']),
+          whatsapp ? el('div', { class: 'contact-detail' }, [whatsapp]) : null,
+          email ? el('div', { class: 'contact-detail' }, [email]) : null,
+        ]),
+        actions.length ? el('div', { class: 'contact-actions' }, actions) : null,
+      ]),
+    ]);
+  }
+
   function buildViewModalView(sys) {
     const categories = Array.isArray(sys.categories) ? sys.categories : [];
 
@@ -1085,6 +1169,7 @@
         viewField('Cadastrado em', sys.created_at ? formatDateBR(sys.created_at) : '—'),
         viewField('Atualizado em', sys.updated_at ? formatDateBR(sys.updated_at) : '—'),
       ]),
+      buildContactSection(sys),
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       buildSubscriptionsView(sys.subscriptions),
     ]);
@@ -1139,6 +1224,7 @@
     );
 
     const subsEditor = buildSubscriptionsEditor(sys.subscriptions || []);
+    const contactFields = buildContactFields(sys);
 
     let logoData = sys.logo || '';
     const logoPreview = el('div', { class: 'logo-preview' }, [
@@ -1197,6 +1283,9 @@
           name, url, repo_url: repoUrl, login_email: email, logo: logoData,
           categories,
           subscriptions: subsEditor.getSubscriptions(),
+          contact_name: contactFields.nameInput.value.trim(),
+          contact_whatsapp: contactFields.whatsappInput.value.trim(),
+          contact_email: contactFields.emailInput.value.trim(),
         };
         if (password) body.login_password = password;
         const res = await api('/systems/' + sys.id, { method: 'PUT', body });
@@ -1224,6 +1313,7 @@
         el('label', {}, ['Senha']),
         el('div', { class: 'password-field' }, [passInput, passToggle]),
       ]),
+      contactFields.container,
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       subsEditor.container,
       el('div', { class: 'field' }, [
@@ -1274,6 +1364,7 @@
     );
 
     const subsEditor = buildSubscriptionsEditor([]);
+    const contactFields = buildContactFields({});
 
     const passToggle = el('button', {
       type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
@@ -1336,6 +1427,9 @@
           name, url, repo_url: repoUrl, login_email: email, logo: logoData,
           categories,
           subscriptions: subsEditor.getSubscriptions(),
+          contact_name: contactFields.nameInput.value.trim(),
+          contact_whatsapp: contactFields.whatsappInput.value.trim(),
+          contact_email: contactFields.emailInput.value.trim(),
           login_password: password,
         };
         const res = await api('/systems', { method: 'POST', body });
@@ -1362,6 +1456,7 @@
         el('label', {}, ['Senha']),
         el('div', { class: 'password-field' }, [passInput, passToggle]),
       ]),
+      contactFields.container,
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       subsEditor.container,
       el('div', { class: 'field' }, [
