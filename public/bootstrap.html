@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Criar primeira conta · Hello Inova</title>
+  <link rel="icon" type="image/png" href="/assets/logo-mark.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --bg-0: #05060a;
+      --bg-1: #0a0c14;
+      --panel: #10121e;
+      --blue-700: #123fd6;
+      --blue-500: #2f7bff;
+      --blue-400: #57a2ff;
+      --text-0: #f5f8ff;
+      --text-2: #8993ad;
+      --danger: #ff5470;
+      --success: #2fe0a0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 0%, #0d1330, var(--bg-0) 60%);
+      font-family: 'Inter', sans-serif;
+      color: var(--text-0);
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 400px;
+      background: linear-gradient(180deg, var(--panel), var(--bg-1));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    .card img { display: block; height: 40px; margin: 0 auto 20px; }
+    h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      text-align: center;
+      margin: 0 0 6px;
+    }
+    p.sub { color: var(--text-2); font-size: 13px; text-align: center; margin: 0 0 24px; }
+    label { display: block; font-size: 13px; color: var(--text-2); margin: 14px 0 6px; }
+    input {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-0);
+      font-size: 14px;
+      font-family: inherit;
+    }
+    input:focus { outline: none; border-color: var(--blue-500); }
+    button {
+      width: 100%;
+      margin-top: 22px;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--blue-700), var(--blue-400));
+      color: #fff;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    button:disabled { opacity: 0.6; cursor: default; }
+    .msg { margin-top: 16px; font-size: 13px; text-align: center; }
+    .msg.error { color: var(--danger); }
+    .msg.success { color: var(--success); }
+    a.back { display: block; text-align: center; margin-top: 18px; color: var(--blue-400); font-size: 13px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/assets/logo-mark.png" alt="Hello Inova" />
+
+    <div id="step-register">
+      <h1>Criar a primeira conta</h1>
+      <p class="sub">
+        Ferramenta única de inicialização — use apenas uma vez, para criar a
+        conta administradora depois de configurar o sistema pela primeira
+        vez. Novos usuários da mesma conta são criados normalmente pelo
+        módulo "Cadastro de Usuário", já logado.
+      </p>
+      <form id="form-register">
+        <label for="name">Nome</label>
+        <input id="name" name="name" type="text" autocomplete="name" required />
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="6" required />
+        <button type="submit">Criar conta</button>
+      </form>
+      <div id="msg-register" class="msg"></div>
+    </div>
+
+    <div id="step-verify" style="display: none">
+      <h1>Confirme seu e-mail</h1>
+      <p class="sub">Enviamos um código de 6 dígitos para <strong id="verify-email-label"></strong>.</p>
+      <form id="form-verify">
+        <label for="code">Código</label>
+        <input id="code" name="code" type="text" inputmode="numeric" maxlength="6" required />
+        <button type="submit">Confirmar</button>
+      </form>
+      <div id="msg-verify" class="msg"></div>
+    </div>
+
+    <a class="back" href="/">← Voltar para o login</a>
+  </div>
+
+  <script>
+    var pendingEmail = '';
+
+    function showMsg(el, text, kind) {
+      el.textContent = text;
+      el.className = 'msg' + (kind ? ' ' + kind : '');
+    }
+
+    document.getElementById('form-register').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var btn = e.target.querySelector('button');
+      var msg = document.getElementById('msg-register');
+      var body = {
+        name: document.getElementById('name').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+      };
+      btn.disabled = true;
+      showMsg(msg, 'Enviando...', '');
+      try {
+        var res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(data.error || 'Não foi possível criar a conta.');
+        pendingEmail = body.email.toLowerCase();
+        document.getElementById('verify-email-label').textContent = pendingEmail;
+        document.getElementById('step-register').style.display = 'none';
+        document.getElementById('step-verify').style.display = 'block';
+      } catch (err) {
+        showMsg(msg, err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('form-verify').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var btn = e.target.querySelector('button');
+      var msg = document.getElementById('msg-verify');
+      var code = document.getElementById('code').value;
+      btn.disabled = true;
+      showMsg(msg, 'Confirmando...', '');
+      try {
+        var res = await fetch('/api/auth/verify-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingEmail, code: code }),
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(data.error || 'Código inválido.');
+        showMsg(msg, 'Conta criada com sucesso! Redirecionando para o login...', 'success');
+        setTimeout(function () { window.location.href = '/'; }, 1800);
+      } catch (err) {
+        showMsg(msg, err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -77,6 +77,8 @@ helloinova-manager/
 
 Não existe mais cadastro público pela tela de login. Um novo usuário só pode ser criado por alguém que já está logado, pelo módulo fixo **"Cadastro de Usuário"** no menu — e esse novo usuário entra automaticamente na mesma conta/espaço de trabalho de quem o criou (mesmos sistemas, assinaturas e dashboard).
 
+Para criar a **primeira** conta (banco novo, sem nenhum usuário ainda), acesse `/bootstrap.html` (ex: `https://seu-projeto.vercel.app/bootstrap.html`) — uma página simples de inicialização que não aparece em nenhum menu. Depois de criar a primeira conta administradora por ali, use normalmente o módulo "Cadastro de Usuário" para adicionar as próximas pessoas. Essa página também serve para criar uma conta totalmente nova e independente (ex: outra empresa usando o mesmo sistema).
+
 ## Modelo de dados
 
 - **users**: id, name, email, password_hash, role, account_id (conta/espaço de trabalho ao qual pertence), email_verified, created_at
