@@ -46,7 +46,7 @@ npm run dev
 
 1. Importe este repositório em [vercel.com/new](https://vercel.com/new). O projeto já inclui um `vercel.json` com uma configuração explícita (`builds`/`routes`) apontando para `api/index.js` como única função serverless — isso desliga por completo a detecção automática de framework da Vercel (que em alguns casos empacotava o app incorretamente e tentava usar outro arquivo como ponto de entrada). Não é preciso mexer em "Framework Preset" nas configurações do projeto: quando `vercel.json` define `builds`, a Vercel ignora esse ajuste do painel.
 2. Na aba **Storage** do projeto, adicione um banco **Postgres** (ex: integração com Neon) — isso injeta a variável `DATABASE_URL` automaticamente. Se preferir usar outro provedor de Postgres, defina `DATABASE_URL` manualmente em **Settings → Environment Variables**.
-3. Ainda em **Environment Variables**, defina: `JWT_SECRET` (uma string aleatória longa), `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`.
+3. Ainda em **Environment Variables**, defina: `JWT_SECRET` (uma string aleatória longa), `SYSTEMS_ENC_KEY` (64 caracteres hexadecimais — veja `.env.example` para como gerar; **obrigatória em produção**, sem ela o app trava ao subir), `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`.
 4. Faça o deploy. O schema do banco é criado automaticamente na primeira requisição (não é preciso rodar migração manual).
 
 ## Estrutura do projeto

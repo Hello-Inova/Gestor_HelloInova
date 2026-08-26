@@ -1,25 +1,51 @@
 // Criptografia simétrica (AES-256-GCM) para as senhas dos sistemas cadastrados
-// no Gestor de Sistemas. A chave é gerada uma única vez e guardada em disco,
-// fora do banco de dados e fora do git.
+// no Gestor de Sistemas.
+//
+// A chave vem preferencialmente da variável de ambiente SYSTEMS_ENC_KEY (é
+// assim que funciona em produção/Vercel, onde o disco é somente leitura e
+// não sobrevive entre deploys/instâncias). Em desenvolvimento local, se essa
+// variável não estiver definida, cai para uma chave gerada uma única vez e
+// guardada em disco (fora do git), só por conveniência.
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-const KEY_PATH = path.join(DATA_DIR, '.secret_key');
-
-function loadOrCreateKey() {
-  if (fs.existsSync(KEY_PATH)) {
-    return Buffer.from(fs.readFileSync(KEY_PATH, 'utf8').trim(), 'hex');
+function keyFromEnv() {
+  const raw = process.env.SYSTEMS_ENC_KEY;
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    throw new Error(
+      'A variável de ambiente SYSTEMS_ENC_KEY precisa ter 64 caracteres hexadecimais (32 bytes). ' +
+        'Gere uma nova com: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
   }
-  const key = crypto.randomBytes(32);
-  fs.writeFileSync(KEY_PATH, key.toString('hex'), { mode: 0o600 });
-  return key;
+  return Buffer.from(trimmed, 'hex');
 }
 
-const KEY = loadOrCreateKey();
+function keyFromLocalFile() {
+  // Fallback só para desenvolvimento local. Em produção (Vercel) o disco é
+  // somente leitura e não persiste entre instâncias/deploys, por isso ali a
+  // chave sempre precisa vir de SYSTEMS_ENC_KEY.
+  const DATA_DIR = path.join(__dirname, '..', 'data');
+  const KEY_PATH = path.join(DATA_DIR, '.secret_key');
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(KEY_PATH)) {
+      return Buffer.from(fs.readFileSync(KEY_PATH, 'utf8').trim(), 'hex');
+    }
+    const key = crypto.randomBytes(32);
+    fs.writeFileSync(KEY_PATH, key.toString('hex'), { mode: 0o600 });
+    return key;
+  } catch (e) {
+    throw new Error(
+      `Não foi possível gerar/ler a chave de criptografia local (${e.message}). ` +
+        'Defina a variável de ambiente SYSTEMS_ENC_KEY (veja .env.example) — é obrigatório em produção.'
+    );
+  }
+}
+
+const KEY = keyFromEnv() || keyFromLocalFile();
 const IV_LENGTH = 12; // recomendado para GCM
 
 function encrypt(plainText) {
