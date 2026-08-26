@@ -14,6 +14,12 @@ const dashboardRoutes = require('./routes/dashboard');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// A Vercel (e outros hosts serverless) ficam atrás de um proxy reverso que
+// termina o HTTPS e repassa o protocolo original no header
+// "X-Forwarded-Proto". Sem isso, req.protocol sempre voltaria "http",
+// gerando links errados (ex: no e-mail de recuperação de senha).
+app.set('trust proxy', 1);
+
 // Limite maior para caber o anexo de contrato (base64) além da logo do sistema.
 app.use(express.json({ limit: '8mb' }));
 app.use(cookieParser());

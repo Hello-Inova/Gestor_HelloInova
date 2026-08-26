@@ -151,6 +151,18 @@ const SCHEMA_SQL = `
     ip TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+
+  -- Tokens de recuperação de senha ("esqueci minha senha"), enviados por
+  -- e-mail como link. Guardamos só o hash do token (nunca o valor em texto
+  -- puro), como já é feito com os códigos de verificação.
+  CREATE TABLE IF NOT EXISTS password_resets (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    consumed INTEGER NOT NULL DEFAULT 0,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
 `;
 
 // Numa função serverless cada "cold start" carrega este módulo do zero, mas

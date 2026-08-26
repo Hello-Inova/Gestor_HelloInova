@@ -347,6 +347,21 @@ button { font-family: inherit; }
 .auth-switch { margin-top: 18px; text-align: center; font-size: 13px; color: var(--text-2); }
 .auth-switch button { background: none; border: none; color: var(--blue-400); font-weight: 600; cursor: pointer; font-size: 13px; padding: 0; }
 
+.auth-forgot-link {
+  display: block;
+  margin: -6px 0 16px;
+  background: none;
+  border: none;
+  color: var(--blue-400);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 12.5px;
+  padding: 0;
+  text-align: right;
+  width: 100%;
+}
+.auth-forgot-link:hover { text-decoration: underline; }
+
 .auth-error {
   background: rgba(255, 84, 112, 0.12);
   border: 1px solid rgba(255, 84, 112, 0.3);

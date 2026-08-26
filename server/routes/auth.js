@@ -10,7 +10,7 @@ const {
   clearAuthCookie,
   requireAuth,
 } = require('../auth');
-const { sendVerificationEmail } = require('../email');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../email');
 
 const router = express.Router();
 
@@ -26,6 +26,10 @@ const CODE_LENGTH = 6;
 const CODE_EXPIRY_MINUTES = 10;
 const MAX_CODE_ATTEMPTS = 5;
 const RESEND_COOLDOWN_SECONDS = 45;
+
+const RESET_TOKEN_BYTES = 32;
+const RESET_TOKEN_EXPIRY_MINUTES = 30;
+const RESET_COOLDOWN_SECONDS = 45;
 
 const LOGIN_RATE_LIMIT_MAX = 3;
 const LOGIN_RATE_LIMIT_WINDOW_MINUTES = 15;
@@ -115,6 +119,21 @@ async function consumeCode(email, purpose, code) {
   }
   await db.run('UPDATE verification_codes SET consumed = 1 WHERE id = ?', row.id);
   return { ok: true };
+}
+
+// Gera um token de recuperação de senha (texto puro, só para ir no link do
+// e-mail) e retorna também seu hash SHA-256 (o que é salvo no banco). Um
+// token aleatório de 32 bytes tem entropia suficiente para não precisar do
+// custo de bcrypt como nos códigos de 6 dígitos — comparar o hash já é
+// seguro o bastante contra força bruta.
+function generateResetToken() {
+  const token = crypto.randomBytes(RESET_TOKEN_BYTES).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  return { token, tokenHash };
+}
+
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
 
 function loginUser(res, row) {
@@ -296,6 +315,92 @@ router.post(
 
     const code = await createVerificationCode(normalizedEmail, purpose, row.id);
     await sendVerificationEmail({ to: normalizedEmail, name: row.name, code, purpose });
+    res.json({ ok: true });
+  })
+);
+
+// ---------------- Esqueci minha senha (envia o link por e-mail) ----------------
+// Sempre responde { ok: true }, exista ou não o e-mail — evita que alguém
+// use esta rota para descobrir quais e-mails têm conta no sistema.
+router.post(
+  '/forgot-password',
+  ah(async (req, res) => {
+    const { email } = req.body || {};
+    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+
+    const normalizedEmail = email.toLowerCase();
+    const row = await db.get('SELECT * FROM users WHERE email = ?', normalizedEmail);
+
+    if (row) {
+      const last = await db.get(
+        'SELECT * FROM password_resets WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+        row.id
+      );
+      if (last) {
+        const cooldown = await db.get(
+          `SELECT EXTRACT(EPOCH FROM (NOW() - created_at)) as secs FROM password_resets WHERE id = ?`,
+          last.id
+        );
+        if (cooldown && Number(cooldown.secs) < RESET_COOLDOWN_SECONDS) {
+          // Ainda dentro do intervalo mínimo entre pedidos: responde ok
+          // normalmente (sem reenviar), para não expor se o e-mail existe.
+          return res.json({ ok: true });
+        }
+      }
+
+      // Invalida links anteriores ainda válidos antes de criar um novo.
+      await db.run(
+        'UPDATE password_resets SET consumed = 1 WHERE user_id = ? AND consumed = 0',
+        row.id
+      );
+      const { token, tokenHash } = generateResetToken();
+      await db.run(
+        `INSERT INTO password_resets (user_id, token_hash, expires_at)
+         VALUES (?, ?, NOW() + INTERVAL '${RESET_TOKEN_EXPIRY_MINUTES} minutes')`,
+        row.id,
+        tokenHash
+      );
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const link = `${baseUrl}/?reset_token=${token}`;
+      await sendPasswordResetEmail({ to: normalizedEmail, name: row.name, link });
+    }
+
+    res.json({ ok: true });
+  })
+);
+
+// ---------------- Confirma a nova senha (a partir do link recebido) ----------------
+router.post(
+  '/reset-password',
+  ah(async (req, res) => {
+    const { token, password } = req.body || {};
+    if (!token) return res.status(400).json({ error: 'Link inválido.' });
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter ao menos 6 caracteres.' });
+    }
+
+    const tokenHash = hashResetToken(token);
+    const row = await db.get(
+      `SELECT * FROM password_resets
+       WHERE token_hash = ? AND consumed = 0 AND expires_at >= NOW()
+       ORDER BY id DESC LIMIT 1`,
+      tokenHash
+    );
+    if (!row) {
+      return res.status(400).json({
+        error: 'Este link de recuperação é inválido ou expirou. Solicite um novo pelo "Esqueci minha senha".',
+      });
+    }
+
+    await db.run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(password), row.user_id);
+    await db.run('UPDATE password_resets SET consumed = 1 WHERE id = ?', row.id);
+    // Invalida também qualquer outro link ainda ativo para o mesmo usuário.
+    await db.run(
+      'UPDATE password_resets SET consumed = 1 WHERE user_id = ? AND consumed = 0',
+      row.user_id
+    );
+
     res.json({ ok: true });
   })
 );

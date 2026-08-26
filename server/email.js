@@ -61,4 +61,57 @@ async function sendVerificationEmail({ to, name, code, purpose }) {
   }
 }
 
-module.exports = { sendVerificationEmail };
+// Envia o e-mail com o link de recuperação de senha ("esqueci minha
+// senha"). Mesmo comportamento de fallback do sendVerificationEmail: nunca
+// lança erro para quem chamou, apenas registra e retorna { ok: false }.
+async function sendPasswordResetEmail({ to, name, link }) {
+  const greeting = name ? `Olá, ${name}!` : 'Olá!';
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1a1a1a;">
+      <h2 style="margin:0 0 16px;">${greeting}</h2>
+      <p style="font-size:14px;line-height:1.6;">Recebemos um pedido para redefinir a senha da sua conta no Gestor de Sistemas Hello Inova. Clique no botão abaixo para criar uma nova senha:</p>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="${link}" style="display:inline-block;background:#1657ff;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:14px 28px;border-radius:10px;">Criar nova senha</a>
+      </div>
+      <p style="font-size:12px;color:#666;line-height:1.6;word-break:break-all;">Se o botão não funcionar, copie e cole este link no navegador:<br>${link}</p>
+      <p style="font-size:13px;color:#666;line-height:1.6;">Esse link expira em 30 minutos. Se você não pediu essa alteração, pode ignorar este e-mail com segurança — sua senha continua a mesma.</p>
+    </div>
+  `;
+
+  if (!RESEND_API_KEY) {
+    console.log(`[email] RESEND_API_KEY não configurada — link de redefinição de senha para ${to}: ${link}`);
+    return { ok: false, reason: 'no_api_key' };
+  }
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `${FROM_NAME} <${FROM_EMAIL}>`,
+        to: [to],
+        subject: 'Redefinir sua senha — Hello Inova',
+        html,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`[email] Falha ao enviar via Resend (status ${res.status}): ${body}`);
+      console.log(`[email] Link de redefinição de senha para ${to} (fallback log): ${link}`);
+      return { ok: false, reason: 'send_failed' };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('[email] Erro ao chamar a API do Resend:', err.message);
+    console.log(`[email] Link de redefinição de senha para ${to} (fallback log): ${link}`);
+    return { ok: false, reason: 'network_error' };
+  }
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail };

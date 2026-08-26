@@ -7,6 +7,7 @@ Identidade visual aplicada em todo o sistema: fundo escuro, gradiente azul, tipo
 ## Funcionalidades
 
 - **Cadastro e login de usuários** (senha criptografada, sessão via cookie JWT httpOnly).
+- **Recuperação de senha** ("Esqueci minha senha" na tela de login): envia um link por e-mail que abre um pop-up para definir e confirmar a nova senha (com visualizador de senha), redirecionando para o login ao concluir.
 - **Menu lateral esquerdo** com os módulos de navegação do sistema.
 - **Módulo "Gestor de Sistemas"** (criado automaticamente para todo usuário): cadastre os sistemas geridos pela Hello Inova com nome, link de acesso, e-mail e senha, e use o botão **"Login As"** para abrir o sistema em uma nova aba com a senha copiada para a área de transferência, pronta para colar. Por restrição de segurança dos navegadores (política de mesma origem), não é possível preencher automaticamente o formulário de login de outro site a partir do navegador — por isso o fluxo é "abrir + copiar para colar".
 - **Módulos personalizados**: crie quantos módulos quiser além do Gestor de Sistemas, cada um com seu próprio editor de elementos.
@@ -86,6 +87,7 @@ A rota de backend `POST /api/auth/register` continua existindo (sem tela própri
 - **elements**: id, page_id, type (`label` | `input` | `button`), content, placeholder, x, y, width, height (em %), font_size, font_color, bg_color, border_radius, font_weight, z_index
 - **systems** (compartilhados por conta): id, user_id (guarda o `account_id` do dono), name, url, login_email, login_password_enc (criptografada), categories, subscriptions, created_at, updated_at
 - **verification_codes** / **login_attempts**: suporte ao login em duas etapas e à trava de força bruta.
+- **password_resets**: tokens de recuperação de senha (link por e-mail), com hash SHA-256 do token, expiração de 30 minutos e uso único.
 
 ## Sobre o "Login As"
 

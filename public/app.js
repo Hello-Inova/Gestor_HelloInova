@@ -26,7 +26,21 @@
     systemsFilterCategories: [],
     users: null, // lista de usuários da conta (módulo "Cadastro de Usuário")
     userModal: false,
+    forgotPasswordOpen: false, // pop-up "esqueci minha senha" (pede o e-mail)
+    resetToken: null, // token vindo do link do e-mail de recuperação de senha
   };
+
+  // Se a página foi aberta a partir do link de recuperação de senha
+  // (?reset_token=...), guarda o token e limpa a URL — assim ele não fica
+  // visível na barra de endereço nem reaparece se a página for atualizada.
+  {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('reset_token');
+    if (tokenFromUrl) {
+      state.resetToken = tokenFromUrl;
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }
 
   const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
 
@@ -244,6 +258,10 @@
       if (state.viewModal) $app.appendChild(buildViewModal());
       if (state.userModal) $app.appendChild(buildUserModal());
     }
+    // Estes dois pop-ups funcionam por cima de qualquer tela (mesmo
+    // deslogado), já que o objetivo é justamente recuperar o acesso.
+    if (state.forgotPasswordOpen) $app.appendChild(buildForgotPasswordModal());
+    if (state.resetToken) $app.appendChild(buildResetPasswordModal());
   }
 
   // ================================================================
@@ -296,6 +314,11 @@
       el('div', { class: 'password-field' }, [passInput, passToggle]),
     ]);
 
+    const forgotBtn = el('button', {
+      type: 'button', class: 'auth-forgot-link',
+      onclick: () => { state.forgotPasswordOpen = true; render(); },
+    }, ['Esqueci minha senha']);
+
     const form = el('form', {
       onsubmit: async (ev) => {
         ev.preventDefault();
@@ -331,6 +354,7 @@
     }, [
       emailField,
       passField,
+      forgotBtn,
     ]);
 
     submitBtn = el('button', { type: 'submit', class: 'btn btn-primary btn-block' }, ['Entrar']);
@@ -429,6 +453,155 @@
     ]);
 
     return el('div', { class: 'auth-screen' }, [authBrand(), el('div', { class: 'auth-form-wrap' }, [card])]);
+  }
+
+  // ---- Pop-up "Esqueci minha senha" (pede o e-mail) ----
+  function buildForgotPasswordModal() {
+    let errorBox = null;
+    let submitBtn;
+
+    const emailInput = el('input', {
+      type: 'email', placeholder: 'voce@helloinova.com.br', autocomplete: 'email',
+    });
+
+    const closeModal = () => { state.forgotPasswordOpen = false; render(); };
+
+    const form = el('form', {
+      onsubmit: async (ev) => {
+        ev.preventDefault();
+        if (errorBox) { errorBox.remove(); errorBox = null; }
+        const email = emailInput.value.trim();
+        if (!email) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Enviando…';
+        try {
+          await api('/auth/forgot-password', { method: 'POST', body: { email } });
+          state.forgotPasswordOpen = false;
+          render();
+          toast('Se este e-mail estiver cadastrado, enviamos um link de recuperação.');
+        } catch (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Enviar link de recuperação';
+          const box = el('div', { class: 'auth-error' }, [err.message]);
+          form.insertBefore(box, form.firstChild);
+          errorBox = box;
+        }
+      },
+    }, [
+      el('div', { class: 'field' }, [el('label', {}, ['E-mail']), emailInput]),
+    ]);
+
+    submitBtn = el('button', { type: 'submit', class: 'btn btn-primary btn-block' }, ['Enviar link de recuperação']);
+    form.appendChild(submitBtn);
+
+    const card = el('div', { class: 'modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Recuperar senha']),
+        el('button', { class: 'btn btn-ghost btn-icon', type: 'button', onclick: closeModal, html: icon('close') }),
+      ]),
+      el('div', { class: 'modal-body' }, [
+        el('p', { class: 'sub', style: 'margin:0 0 18px' }, [
+          'Informe o e-mail da sua conta. Se ele existir, enviaremos um link para você criar uma nova senha.',
+        ]),
+        form,
+      ]),
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (ev) => { if (ev.target === ev.currentTarget) closeModal(); },
+    }, [card]);
+  }
+
+  // ---- Pop-up "Nova senha" (aberto a partir do link recebido por e-mail) ----
+  function buildResetPasswordModal() {
+    let errorBox = null;
+    let submitBtn;
+
+    const passInput = el('input', {
+      type: 'password', placeholder: 'Nova senha', autocomplete: 'new-password',
+    });
+    const passConfirm = el('input', {
+      type: 'password', placeholder: 'Repita a nova senha', autocomplete: 'new-password',
+    });
+    const passToggle = el('button', {
+      type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
+      html: icon('eye'),
+      onclick: () => {
+        const showing = passInput.type === 'text';
+        passInput.type = passConfirm.type = showing ? 'password' : 'text';
+        passToggle.innerHTML = icon(showing ? 'eye' : 'eyeOff');
+      },
+    });
+
+    const closeModal = () => { state.resetToken = null; render(); };
+
+    const form = el('form', {
+      onsubmit: async (ev) => {
+        ev.preventDefault();
+        if (errorBox) { errorBox.remove(); errorBox = null; }
+        const password = passInput.value;
+        const confirmPassword = passConfirm.value;
+
+        if (password.length < 6) {
+          const box = el('div', { class: 'auth-error' }, ['A senha deve ter ao menos 6 caracteres.']);
+          form.insertBefore(box, form.firstChild);
+          errorBox = box;
+          return;
+        }
+        if (password !== confirmPassword) {
+          const box = el('div', { class: 'auth-error' }, ['As senhas não coincidem.']);
+          form.insertBefore(box, form.firstChild);
+          errorBox = box;
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Salvando…';
+        try {
+          await api('/auth/reset-password', { method: 'POST', body: { token: state.resetToken, password } });
+          // Redireciona para a tela de login: fecha o pop-up e garante que
+          // nenhuma sessão antiga fique ativa (a senha acabou de mudar).
+          state.resetToken = null;
+          state.user = null;
+          state.pages = [];
+          state.systems = null;
+          state.authStep = 'form';
+          state.authPending = null;
+          render();
+          toast('Senha alterada com sucesso! Faça login com sua nova senha.');
+        } catch (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Salvar nova senha';
+          const box = el('div', { class: 'auth-error' }, [err.message]);
+          form.insertBefore(box, form.firstChild);
+          errorBox = box;
+        }
+      },
+    }, [
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Nova senha']),
+        el('div', { class: 'password-field' }, [passInput, passToggle]),
+      ]),
+      el('div', { class: 'field' }, [el('label', {}, ['Repetir nova senha']), passConfirm]),
+    ]);
+
+    submitBtn = el('button', { type: 'submit', class: 'btn btn-primary btn-block' }, ['Salvar nova senha']);
+    form.appendChild(submitBtn);
+
+    const card = el('div', { class: 'modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Criar nova senha']),
+        el('button', { class: 'btn btn-ghost btn-icon', type: 'button', onclick: closeModal, html: icon('close') }),
+      ]),
+      el('div', { class: 'modal-body' }, [form]),
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (ev) => { if (ev.target === ev.currentTarget) closeModal(); },
+    }, [card]);
   }
 
   // ================================================================
