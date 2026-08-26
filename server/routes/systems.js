@@ -7,6 +7,11 @@ const { SYSTEM_CATEGORIES } = require('../categories');
 const router = express.Router();
 router.use(requireAuth);
 
+// Express 4 não encaminha automaticamente rejeições de handlers async para o
+// middleware de erro — sem isso, um erro depois de um "await" faria a
+// requisição travar sem resposta.
+const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 const MAX_LOGO_LENGTH = 1_500_000; // ~1.1MB de imagem original (base64 infla ~33%)
 const MAX_CONTRACT_LENGTH = 7_000_000; // ~5.2MB de arquivo original (base64 infla ~33%)
 
@@ -56,8 +61,8 @@ function toPublic(row) {
   };
 }
 
-function getOwned(id, accountId) {
-  return db.prepare('SELECT * FROM systems WHERE id = ? AND user_id = ?').get(id, accountId);
+async function getOwned(id, accountId) {
+  return db.get('SELECT * FROM systems WHERE id = ? AND user_id = ?', id, accountId);
 }
 
 function validLogo(logo) {
@@ -142,126 +147,135 @@ router.get('/categories', (req, res) => {
 });
 
 // Lista sistemas cadastrados (sem a senha em texto puro)
-router.get('/', (req, res) => {
-  const rows = db
-    .prepare('SELECT * FROM systems WHERE user_id = ? ORDER BY id DESC')
-    .all(req.user.account_id);
-  res.json({ systems: rows.map(toPublic) });
-});
+router.get(
+  '/',
+  ah(async (req, res) => {
+    const rows = await db.all('SELECT * FROM systems WHERE user_id = ? ORDER BY id DESC', req.user.account_id);
+    res.json({ systems: rows.map(toPublic) });
+  })
+);
 
 // Cadastra um novo sistema
-router.post('/', (req, res) => {
-  const {
-    name, url, repo_url = '', login_email = '', login_password = '', logo = '',
-    categories, subscriptions,
-    contact_name = '', contact_whatsapp = '', contact_email = '',
-    contract_file = '', contract_file_name = '',
-  } = req.body || {};
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
-  if (!url || !url.trim()) return res.status(400).json({ error: 'Informe o link de acesso.' });
-  if (!validLogo(logo)) return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
-  if (!validContractFile(contract_file)) {
-    return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
-  }
+router.post(
+  '/',
+  ah(async (req, res) => {
+    const {
+      name, url, repo_url = '', login_email = '', login_password = '', logo = '',
+      categories, subscriptions,
+      contact_name = '', contact_whatsapp = '', contact_email = '',
+      contract_file = '', contract_file_name = '',
+    } = req.body || {};
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
+    if (!url || !url.trim()) return res.status(400).json({ error: 'Informe o link de acesso.' });
+    if (!validLogo(logo)) return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
+    if (!validContractFile(contract_file)) {
+      return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
+    }
 
-  const cat = parseCategories(categories);
-  if (!cat.ok) return res.status(400).json({ error: cat.error });
-  const subs = parseSubscriptions(subscriptions);
-  if (!subs.ok) return res.status(400).json({ error: subs.error });
-  const contact = parseContact(contact_name, contact_whatsapp, contact_email);
-  if (!contact.ok) return res.status(400).json({ error: contact.error });
+    const cat = parseCategories(categories);
+    if (!cat.ok) return res.status(400).json({ error: cat.error });
+    const subs = parseSubscriptions(subscriptions);
+    if (!subs.ok) return res.status(400).json({ error: subs.error });
+    const contact = parseContact(contact_name, contact_whatsapp, contact_email);
+    if (!contact.ok) return res.status(400).json({ error: contact.error });
 
-  const info = db
-    .prepare(
+    const inserted = await db.run(
       `INSERT INTO systems
         (user_id, name, url, repo_url, login_email, login_password_enc, logo, categories, subscriptions,
          contact_name, contact_whatsapp, contact_email, contract_file, contract_file_name)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    )
-    .run(
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       RETURNING *`,
       req.user.account_id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
       JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || []),
       contact.contact_name, contact.contact_whatsapp, contact.contact_email,
       contract_file || '', (contract_file_name || '').trim().slice(0, 200)
     );
 
-  const row = db.prepare('SELECT * FROM systems WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json({ system: toPublic(row) });
-});
+    res.status(201).json({ system: toPublic(inserted.rows[0]) });
+  })
+);
 
 // Atualiza um sistema
-router.put('/:id', (req, res) => {
-  const row = getOwned(req.params.id, req.user.account_id);
-  if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
+router.put(
+  '/:id',
+  ah(async (req, res) => {
+    const row = await getOwned(req.params.id, req.user.account_id);
+    if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
 
-  const {
-    name, url, repo_url, login_email, login_password, logo,
-    categories, subscriptions,
-    contact_name, contact_whatsapp, contact_email,
-    contract_file, contract_file_name,
-  } = req.body || {};
-  if (logo !== undefined && !validLogo(logo)) {
-    return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
-  }
-  if (contract_file !== undefined && !validContractFile(contract_file)) {
-    return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
-  }
-  const cat = parseCategories(categories);
-  if (!cat.ok) return res.status(400).json({ error: cat.error });
-  const subs = parseSubscriptions(subscriptions);
-  if (!subs.ok) return res.status(400).json({ error: subs.error });
-  const contact = parseContact(
-    contact_name === undefined ? row.contact_name : contact_name,
-    contact_whatsapp === undefined ? row.contact_whatsapp : contact_whatsapp,
-    contact_email === undefined ? row.contact_email : contact_email
-  );
-  if (!contact.ok) return res.status(400).json({ error: contact.error });
+    const {
+      name, url, repo_url, login_email, login_password, logo,
+      categories, subscriptions,
+      contact_name, contact_whatsapp, contact_email,
+      contract_file, contract_file_name,
+    } = req.body || {};
+    if (logo !== undefined && !validLogo(logo)) {
+      return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
+    }
+    if (contract_file !== undefined && !validContractFile(contract_file)) {
+      return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
+    }
+    const cat = parseCategories(categories);
+    if (!cat.ok) return res.status(400).json({ error: cat.error });
+    const subs = parseSubscriptions(subscriptions);
+    if (!subs.ok) return res.status(400).json({ error: subs.error });
+    const contact = parseContact(
+      contact_name === undefined ? row.contact_name : contact_name,
+      contact_whatsapp === undefined ? row.contact_whatsapp : contact_whatsapp,
+      contact_email === undefined ? row.contact_email : contact_email
+    );
+    if (!contact.ok) return res.status(400).json({ error: contact.error });
 
-  const newName = typeof name === 'string' && name.trim() ? name.trim() : row.name;
-  const newUrl = typeof url === 'string' && url.trim() ? url.trim() : row.url;
-  const newRepoUrl = typeof repo_url === 'string' ? repo_url.trim() : row.repo_url;
-  const newEmail = typeof login_email === 'string' ? login_email.trim() : row.login_email;
-  const newPassEnc =
-    typeof login_password === 'string' && login_password !== '' ? encrypt(login_password) : row.login_password_enc;
-  const newLogo = typeof logo === 'string' ? logo : row.logo;
-  const newCategories = cat.categories === undefined ? row.categories : JSON.stringify(cat.categories);
-  const newSubscriptions = subs.subscriptions === undefined ? row.subscriptions : JSON.stringify(subs.subscriptions);
-  const newContractFile = typeof contract_file === 'string' ? contract_file : row.contract_file;
-  const newContractFileName =
-    typeof contract_file_name === 'string' ? contract_file_name.trim().slice(0, 200) : row.contract_file_name;
+    const newName = typeof name === 'string' && name.trim() ? name.trim() : row.name;
+    const newUrl = typeof url === 'string' && url.trim() ? url.trim() : row.url;
+    const newRepoUrl = typeof repo_url === 'string' ? repo_url.trim() : row.repo_url;
+    const newEmail = typeof login_email === 'string' ? login_email.trim() : row.login_email;
+    const newPassEnc =
+      typeof login_password === 'string' && login_password !== '' ? encrypt(login_password) : row.login_password_enc;
+    const newLogo = typeof logo === 'string' ? logo : row.logo;
+    const newCategories = cat.categories === undefined ? row.categories : JSON.stringify(cat.categories);
+    const newSubscriptions = subs.subscriptions === undefined ? row.subscriptions : JSON.stringify(subs.subscriptions);
+    const newContractFile = typeof contract_file === 'string' ? contract_file : row.contract_file;
+    const newContractFileName =
+      typeof contract_file_name === 'string' ? contract_file_name.trim().slice(0, 200) : row.contract_file_name;
 
-  db.prepare(
-    `UPDATE systems SET name=?, url=?, repo_url=?, login_email=?, login_password_enc=?, logo=?,
-       categories=?, subscriptions=?, contact_name=?, contact_whatsapp=?, contact_email=?,
-       contract_file=?, contract_file_name=?,
-       updated_at=datetime('now') WHERE id=?`
-  ).run(
-    newName, newUrl, newRepoUrl, newEmail, newPassEnc, newLogo, newCategories, newSubscriptions,
-    contact.contact_name, contact.contact_whatsapp, contact.contact_email,
-    newContractFile, newContractFileName, row.id
-  );
+    const updated = await db.run(
+      `UPDATE systems SET name=?, url=?, repo_url=?, login_email=?, login_password_enc=?, logo=?,
+         categories=?, subscriptions=?, contact_name=?, contact_whatsapp=?, contact_email=?,
+         contract_file=?, contract_file_name=?,
+         updated_at=NOW() WHERE id=?
+       RETURNING *`,
+      newName, newUrl, newRepoUrl, newEmail, newPassEnc, newLogo, newCategories, newSubscriptions,
+      contact.contact_name, contact.contact_whatsapp, contact.contact_email,
+      newContractFile, newContractFileName, row.id
+    );
 
-  const updated = db.prepare('SELECT * FROM systems WHERE id = ?').get(row.id);
-  res.json({ system: toPublic(updated) });
-});
+    res.json({ system: toPublic(updated.rows[0]) });
+  })
+);
 
 // Exclui um sistema
-router.delete('/:id', (req, res) => {
-  const row = getOwned(req.params.id, req.user.account_id);
-  if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
-  db.prepare('DELETE FROM systems WHERE id = ?').run(row.id);
-  res.json({ ok: true });
-});
+router.delete(
+  '/:id',
+  ah(async (req, res) => {
+    const row = await getOwned(req.params.id, req.user.account_id);
+    if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
+    await db.run('DELETE FROM systems WHERE id = ?', row.id);
+    res.json({ ok: true });
+  })
+);
 
 // Revela as credenciais em texto puro (usado só no momento do "Login As")
-router.get('/:id/reveal', (req, res) => {
-  const row = getOwned(req.params.id, req.user.account_id);
-  if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
-  res.json({
-    url: row.url,
-    login_email: row.login_email,
-    login_password: decrypt(row.login_password_enc),
-  });
-});
+router.get(
+  '/:id/reveal',
+  ah(async (req, res) => {
+    const row = await getOwned(req.params.id, req.user.account_id);
+    if (!row) return res.status(404).json({ error: 'Sistema não encontrado.' });
+    res.json({
+      url: row.url,
+      login_email: row.login_email,
+      login_password: decrypt(row.login_password_enc),
+    });
+  })
+);
 
 module.exports = router;

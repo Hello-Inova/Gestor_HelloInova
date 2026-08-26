@@ -5,136 +5,171 @@ const { requireAuth } = require('../auth');
 const router = express.Router();
 router.use(requireAuth);
 
-function getOwnedPage(pageId, accountId) {
-  return db.prepare('SELECT * FROM pages WHERE id = ? AND user_id = ?').get(pageId, accountId);
+// Express 4 não encaminha automaticamente rejeições de handlers async para o
+// middleware de erro — sem isso, um erro depois de um "await" faria a
+// requisição travar sem resposta.
+const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+async function getOwnedPage(pageId, accountId) {
+  return db.get('SELECT * FROM pages WHERE id = ? AND user_id = ?', pageId, accountId);
 }
 
-// Garante que todo usuário ganhe o módulo especial "Gestor de Sistemas" uma
+// Garante que toda CONTA ganhe o módulo especial "Gestor de Sistemas" uma
 // única vez (na primeira listagem após o cadastro/migração). Usa a flag
-// systems_seeded para não recriar o módulo caso o usuário o exclua de propósito.
-function ensureSystemsModule(accountId) {
-  const user = db.prepare('SELECT systems_seeded FROM users WHERE id = ?').get(accountId);
+// systems_seeded para não recriar o módulo caso a conta o exclua de
+// propósito. Na prática isso já acontece de forma atômica em POST
+// /auth/register — esta função fica como rede de segurança.
+async function ensureSystemsModule(accountId) {
+  const user = await db.get('SELECT systems_seeded FROM users WHERE id = ?', accountId);
   if (!user || user.systems_seeded) return;
 
   // Se já existe um módulo comum com esse mesmo nome (de antes desta atualização),
   // renomeia para não confundir com o novo módulo especial.
-  const clash = db
-    .prepare("SELECT id, name FROM pages WHERE user_id = ? AND type != 'systems' AND lower(name) = 'gestor de sistemas'")
-    .get(accountId);
-  if (clash) {
-    db.prepare('UPDATE pages SET name = ? WHERE id = ?').run(clash.name + ' (antigo)', clash.id);
-  }
-
-  db.prepare('UPDATE pages SET order_index = order_index + 1 WHERE user_id = ?').run(accountId);
-  db.prepare("INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Gestor de Sistemas', 'systems', 0)").run(
+  const clash = await db.get(
+    "SELECT id, name FROM pages WHERE user_id = ? AND type != 'systems' AND lower(name) = 'gestor de sistemas'",
     accountId
   );
-  db.prepare('UPDATE users SET systems_seeded = 1 WHERE id = ?').run(accountId);
+  if (clash) {
+    await db.run('UPDATE pages SET name = ? WHERE id = ?', clash.name + ' (antigo)', clash.id);
+  }
+
+  await db.run('UPDATE pages SET order_index = order_index + 1 WHERE user_id = ?', accountId);
+  await db.run(
+    "INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Gestor de Sistemas', 'systems', 0)",
+    accountId
+  );
+  await db.run('UPDATE users SET systems_seeded = 1 WHERE id = ?', accountId);
 }
 
-// Lista módulos do usuário, com seus elementos
-router.get('/', (req, res) => {
-  ensureSystemsModule(req.user.account_id);
+// Lista módulos da conta, com seus elementos
+router.get(
+  '/',
+  ah(async (req, res) => {
+    await ensureSystemsModule(req.user.account_id);
 
-  const pages = db
-    .prepare('SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC')
-    .all(req.user.account_id);
+    const pages = await db.all(
+      'SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC',
+      req.user.account_id
+    );
 
-  const elementsStmt = db.prepare('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC');
-  const result = pages.map((p) => ({ ...p, elements: p.type === 'systems' ? [] : elementsStmt.all(p.id) }));
-  res.json({ pages: result });
-});
+    const result = await Promise.all(
+      pages.map(async (p) => ({
+        ...p,
+        elements: p.type === 'systems' ? [] : await db.all('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC', p.id),
+      }))
+    );
+    res.json({ pages: result });
+  })
+);
 
-// Cria módulo (sempre do tipo "canvas" — o módulo "Gestor de Sistemas" é único e criado no cadastro)
-router.post('/', (req, res) => {
-  const { name } = req.body || {};
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do módulo.' });
+// Cria módulo (sempre do tipo "canvas" — os módulos especiais são únicos e criados no cadastro)
+router.post(
+  '/',
+  ah(async (req, res) => {
+    const { name } = req.body || {};
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do módulo.' });
 
-  const maxOrder = db
-    .prepare('SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?')
-    .get(req.user.account_id).m;
+    const maxOrderRow = await db.get(
+      'SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?',
+      req.user.account_id
+    );
 
-  const info = db
-    .prepare("INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, 'canvas', ?)")
-    .run(req.user.account_id, name.trim(), maxOrder + 1);
+    const inserted = await db.run(
+      "INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, 'canvas', ?) RETURNING *",
+      req.user.account_id,
+      name.trim(),
+      Number(maxOrderRow.m) + 1
+    );
 
-  const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json({ page: { ...page, elements: [] } });
-});
+    res.status(201).json({ page: { ...inserted.rows[0], elements: [] } });
+  })
+);
 
 // Renomeia / reordena módulo
-router.put('/:id', (req, res) => {
-  const page = getOwnedPage(req.params.id, req.user.account_id);
-  if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
+router.put(
+  '/:id',
+  ah(async (req, res) => {
+    const page = await getOwnedPage(req.params.id, req.user.account_id);
+    if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
 
-  const { name, order_index } = req.body || {};
-  const newName = typeof name === 'string' && name.trim() ? name.trim() : page.name;
-  const newOrder = typeof order_index === 'number' ? order_index : page.order_index;
+    const { name, order_index } = req.body || {};
+    const newName = typeof name === 'string' && name.trim() ? name.trim() : page.name;
+    const newOrder = typeof order_index === 'number' ? order_index : page.order_index;
 
-  db.prepare('UPDATE pages SET name = ?, order_index = ? WHERE id = ?').run(newName, newOrder, page.id);
-  const updated = db.prepare('SELECT * FROM pages WHERE id = ?').get(page.id);
-  res.json({ page: updated });
-});
+    const updated = await db.run(
+      'UPDATE pages SET name = ?, order_index = ? WHERE id = ? RETURNING *',
+      newName,
+      newOrder,
+      page.id
+    );
+    res.json({ page: updated.rows[0] });
+  })
+);
 
 // Exclui módulo
-router.delete('/:id', (req, res) => {
-  const page = getOwnedPage(req.params.id, req.user.account_id);
-  if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
+router.delete(
+  '/:id',
+  ah(async (req, res) => {
+    const page = await getOwnedPage(req.params.id, req.user.account_id);
+    if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
 
-  const total = db.prepare('SELECT COUNT(*) as c FROM pages WHERE user_id = ?').get(req.user.account_id).c;
-  if (total <= 1) return res.status(400).json({ error: 'É necessário manter ao menos um módulo.' });
+    const totalRow = await db.get('SELECT COUNT(*) as c FROM pages WHERE user_id = ?', req.user.account_id);
+    if (Number(totalRow.c) <= 1) return res.status(400).json({ error: 'É necessário manter ao menos um módulo.' });
 
-  db.prepare('DELETE FROM elements WHERE page_id = ?').run(page.id);
-  db.prepare('DELETE FROM pages WHERE id = ?').run(page.id);
-  res.json({ ok: true });
-});
+    await db.run('DELETE FROM elements WHERE page_id = ?', page.id);
+    await db.run('DELETE FROM pages WHERE id = ?', page.id);
+    res.json({ ok: true });
+  })
+);
 
 // Reordena várias páginas de uma vez (drag no menu lateral)
-router.put('/', (req, res) => {
-  const { order } = req.body || {}; // array de ids na nova ordem
-  if (!Array.isArray(order)) return res.status(400).json({ error: 'Ordem inválida.' });
+router.put(
+  '/',
+  ah(async (req, res) => {
+    const { order } = req.body || {}; // array de ids na nova ordem
+    if (!Array.isArray(order)) return res.status(400).json({ error: 'Ordem inválida.' });
 
-  const update = db.prepare('UPDATE pages SET order_index = ? WHERE id = ? AND user_id = ?');
-  order.forEach((id, idx) => update.run(idx, id, req.user.account_id));
-  res.json({ ok: true });
-});
+    for (let idx = 0; idx < order.length; idx++) {
+      await db.run('UPDATE pages SET order_index = ? WHERE id = ? AND user_id = ?', idx, order[idx], req.user.account_id);
+    }
+    res.json({ ok: true });
+  })
+);
 
 // ---- Elementos ----
 
 // Cria elemento em uma página
-router.post('/:id/elements', (req, res) => {
-  const page = getOwnedPage(req.params.id, req.user.account_id);
-  if (!page) return res.status(404).json({ error: 'Página não encontrada.' });
+router.post(
+  '/:id/elements',
+  ah(async (req, res) => {
+    const page = await getOwnedPage(req.params.id, req.user.account_id);
+    if (!page) return res.status(404).json({ error: 'Página não encontrada.' });
 
-  const {
-    type,
-    content = '',
-    x = 5,
-    y = 5,
-    width = 20,
-    height = 8,
-    font_size = 14,
-    font_color = '#EAF0FF',
-    bg_color = '#1657FF',
-    border_radius = 8,
-    font_weight = '500',
-    placeholder = '',
-  } = req.body || {};
+    const {
+      type,
+      content = '',
+      x = 5,
+      y = 5,
+      width = 20,
+      height = 8,
+      font_size = 14,
+      font_color = '#EAF0FF',
+      bg_color = '#1657FF',
+      border_radius = 8,
+      font_weight = '500',
+      placeholder = '',
+    } = req.body || {};
 
-  const allowedTypes = ['label', 'input', 'button'];
-  if (!allowedTypes.includes(type)) return res.status(400).json({ error: 'Tipo de elemento inválido.' });
+    const allowedTypes = ['label', 'input', 'button'];
+    if (!allowedTypes.includes(type)) return res.status(400).json({ error: 'Tipo de elemento inválido.' });
 
-  const maxZ = db
-    .prepare('SELECT COALESCE(MAX(z_index), 0) as m FROM elements WHERE page_id = ?')
-    .get(page.id).m;
+    const maxZRow = await db.get('SELECT COALESCE(MAX(z_index), 0) as m FROM elements WHERE page_id = ?', page.id);
 
-  const info = db
-    .prepare(
+    const inserted = await db.run(
       `INSERT INTO elements
         (page_id, type, content, x, y, width, height, font_size, font_color, bg_color, border_radius, font_weight, z_index, placeholder)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    )
-    .run(
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       RETURNING *`,
       page.id,
       type,
       content,
@@ -147,79 +182,83 @@ router.post('/:id/elements', (req, res) => {
       bg_color,
       border_radius,
       font_weight,
-      maxZ + 1,
+      Number(maxZRow.m) + 1,
       placeholder
     );
 
-  const element = db.prepare('SELECT * FROM elements WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json({ element });
-});
+    res.status(201).json({ element: inserted.rows[0] });
+  })
+);
 
-function getOwnedElement(elementId, accountId) {
-  return db
-    .prepare(
-      `SELECT e.* FROM elements e
-       JOIN pages p ON p.id = e.page_id
-       WHERE e.id = ? AND p.user_id = ?`
-    )
-    .get(elementId, accountId);
+async function getOwnedElement(elementId, accountId) {
+  return db.get(
+    `SELECT e.* FROM elements e
+     JOIN pages p ON p.id = e.page_id
+     WHERE e.id = ? AND p.user_id = ?`,
+    elementId,
+    accountId
+  );
 }
 
 // Atualiza elemento (posição, tamanho, estilo, conteúdo)
-router.put('/elements/:elId', (req, res) => {
-  const el = getOwnedElement(req.params.elId, req.user.account_id);
-  if (!el) return res.status(404).json({ error: 'Elemento não encontrado.' });
+router.put(
+  '/elements/:elId',
+  ah(async (req, res) => {
+    const el = await getOwnedElement(req.params.elId, req.user.account_id);
+    if (!el) return res.status(404).json({ error: 'Elemento não encontrado.' });
 
-  const fields = [
-    'content',
-    'x',
-    'y',
-    'width',
-    'height',
-    'font_size',
-    'font_color',
-    'bg_color',
-    'border_radius',
-    'font_weight',
-    'z_index',
-    'placeholder',
-  ];
-  const updates = {};
-  for (const f of fields) {
-    if (req.body && Object.prototype.hasOwnProperty.call(req.body, f)) {
-      updates[f] = req.body[f];
+    const fields = [
+      'content',
+      'x',
+      'y',
+      'width',
+      'height',
+      'font_size',
+      'font_color',
+      'bg_color',
+      'border_radius',
+      'font_weight',
+      'z_index',
+      'placeholder',
+    ];
+    const updates = {};
+    for (const f of fields) {
+      if (req.body && Object.prototype.hasOwnProperty.call(req.body, f)) {
+        updates[f] = req.body[f];
+      }
     }
-  }
 
-  const merged = { ...el, ...updates };
-  db.prepare(
-    `UPDATE elements SET content=?, x=?, y=?, width=?, height=?, font_size=?, font_color=?, bg_color=?, border_radius=?, font_weight=?, z_index=?, placeholder=? WHERE id=?`
-  ).run(
-    merged.content,
-    merged.x,
-    merged.y,
-    merged.width,
-    merged.height,
-    merged.font_size,
-    merged.font_color,
-    merged.bg_color,
-    merged.border_radius,
-    merged.font_weight,
-    merged.z_index,
-    merged.placeholder,
-    el.id
-  );
+    const merged = { ...el, ...updates };
+    const updated = await db.run(
+      `UPDATE elements SET content=?, x=?, y=?, width=?, height=?, font_size=?, font_color=?, bg_color=?, border_radius=?, font_weight=?, z_index=?, placeholder=? WHERE id=? RETURNING *`,
+      merged.content,
+      merged.x,
+      merged.y,
+      merged.width,
+      merged.height,
+      merged.font_size,
+      merged.font_color,
+      merged.bg_color,
+      merged.border_radius,
+      merged.font_weight,
+      merged.z_index,
+      merged.placeholder,
+      el.id
+    );
 
-  const updated = db.prepare('SELECT * FROM elements WHERE id = ?').get(el.id);
-  res.json({ element: updated });
-});
+    res.json({ element: updated.rows[0] });
+  })
+);
 
 // Exclui elemento
-router.delete('/elements/:elId', (req, res) => {
-  const el = getOwnedElement(req.params.elId, req.user.account_id);
-  if (!el) return res.status(404).json({ error: 'Elemento não encontrado.' });
-  db.prepare('DELETE FROM elements WHERE id = ?').run(el.id);
-  res.json({ ok: true });
-});
+router.delete(
+  '/elements/:elId',
+  ah(async (req, res) => {
+    const el = await getOwnedElement(req.params.elId, req.user.account_id);
+    if (!el) return res.status(404).json({ error: 'Elemento não encontrado.' });
+    await db.run('DELETE FROM elements WHERE id = ?', el.id);
+    res.json({ ok: true });
+  })
+);
 
 module.exports = router;

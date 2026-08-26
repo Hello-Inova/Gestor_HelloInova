@@ -6,10 +6,15 @@ const { SYSTEM_CATEGORIES } = require('../categories');
 const router = express.Router();
 router.use(requireAuth);
 
+// Express 4 não encaminha automaticamente rejeições de handlers async para o
+// middleware de erro — sem isso, um erro depois de um "await" faria a
+// requisição travar sem resposta.
+const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 // Resumo gerencial/financeiro: total de sistemas, total de assinaturas
 // (quantidade e valor somado) e quantidade de sistemas por categoria.
-router.get('/summary', (req, res) => {
-  const rows = db.prepare('SELECT categories, subscriptions FROM systems WHERE user_id = ?').all(req.user.account_id);
+router.get('/summary', ah(async (req, res) => {
+  const rows = await db.all('SELECT categories, subscriptions FROM systems WHERE user_id = ?', req.user.account_id);
 
   let subscriptionsCount = 0;
   let subscriptionsValue = 0;
@@ -50,6 +55,6 @@ router.get('/summary', (req, res) => {
     categories: SYSTEM_CATEGORIES.map((c) => ({ category: c, count: categoryCounts[c] || 0 })),
     uncategorized_count: uncategorized,
   });
-});
+}));
 
 module.exports = router;

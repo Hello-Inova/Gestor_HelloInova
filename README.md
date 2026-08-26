@@ -20,20 +20,21 @@ Identidade visual aplicada em todo o sistema: fundo escuro, gradiente azul, tipo
 
 ## Stack técnica
 
-- **Backend:** Node.js + Express, autenticação com JWT (cookie httpOnly) e bcrypt para senhas.
-- **Banco de dados:** SQLite nativo do Node.js (`node:sqlite`, incluso desde o Node 22.5) — sem dependências nativas para compilar, funciona em qualquer máquina com Node atualizado.
+- **Backend:** Node.js + Express, autenticação com JWT (cookie httpOnly, sessão deslizante) e bcrypt para senhas, login em duas etapas por código enviado por e-mail (Resend).
+- **Banco de dados:** Postgres (qualquer provedor — Neon, Supabase, Railway, RDS etc.), acessado via `pg` e a variável de ambiente `DATABASE_URL`. Escolhido no lugar de SQLite em arquivo porque o sistema roda como função serverless na Vercel, onde o disco não é persistente entre execuções.
 - **Frontend:** JavaScript puro (SPA sem framework/build step), HTML e CSS, com posicionamento de elementos via drag-and-drop nativo (Pointer Events).
 
-## Como rodar
+## Como rodar localmente
 
-Pré-requisito: **Node.js 22.5 ou superior** (para o módulo `node:sqlite`).
+Pré-requisito: **Node.js 22.5 ou superior** e um banco **Postgres** acessível (local ou hospedado — pode ser o mesmo banco usado em produção, ou um banco separado só para desenvolvimento).
 
 ```bash
 npm install
+cp .env.example .env   # preencha DATABASE_URL, JWT_SECRET, RESEND_API_KEY etc.
 npm start
 ```
 
-O sistema sobe em `http://localhost:3000`. Crie sua conta na tela inicial (aba "Cadastre-se") e comece a montar suas páginas.
+O sistema sobe em `http://localhost:3000`. Faça login com uma conta já existente — o cadastro de novas contas independentes não é mais feito pela tela de login (ver "Contas e usuários" abaixo).
 
 Para desenvolvimento com reinício automático:
 
@@ -41,34 +42,46 @@ Para desenvolvimento com reinício automático:
 npm run dev
 ```
 
+## Publicar na Vercel
+
+1. Importe este repositório em [vercel.com/new](https://vercel.com/new) (a Vercel detecta o Express automaticamente, sem configuração extra).
+2. Na aba **Storage** do projeto, adicione um banco **Postgres** (ex: integração com Neon) — isso injeta a variável `DATABASE_URL` automaticamente. Se preferir usar outro provedor de Postgres, defina `DATABASE_URL` manualmente em **Settings → Environment Variables**.
+3. Ainda em **Environment Variables**, defina: `JWT_SECRET` (uma string aleatória longa), `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`.
+4. Faça o deploy. O schema do banco é criado automaticamente na primeira requisição (não é preciso rodar migração manual).
+
 ## Estrutura do projeto
 
 ```
 helloinova-manager/
+├── server.js            # ponto de entrada usado pela Vercel (reexporta server/index.js)
 ├── server/
-│   ├── index.js        # bootstrap do Express, rotas e arquivos estáticos
-│   ├── db.js            # schema e conexão SQLite
-│   ├── auth.js          # helpers de autenticação (JWT, bcrypt)
-│   ├── crypto.js         # criptografia AES-256-GCM das senhas do Gestor de Sistemas
+│   ├── index.js         # bootstrap do Express, rotas e arquivos estáticos
+│   ├── db.js             # schema e conexão Postgres
+│   ├── auth.js           # helpers de autenticação (JWT, bcrypt)
+│   ├── crypto.js          # criptografia AES-256-GCM das senhas do Gestor de Sistemas
 │   └── routes/
-│       ├── auth.js      # /api/auth (registro, login, logout, me)
-│       ├── pages.js     # /api/pages (módulos e elementos)
-│       └── systems.js   # /api/systems (sistemas cadastrados no Gestor de Sistemas)
-├── client/
-│   └── public/
-│       ├── index.html
-│       ├── styles.css   # identidade visual Hello Inova
-│       ├── app.js       # toda a lógica do front-end (SPA)
-│       └── assets/      # logo Hello Inova
-└── data/                 # banco SQLite + chave de criptografia (criados automaticamente, ignorados no git)
+│       ├── auth.js       # /api/auth (login, verificação por e-mail, perfil, usuários da conta)
+│       ├── pages.js      # /api/pages (módulos e elementos)
+│       ├── systems.js    # /api/systems (sistemas cadastrados no Gestor de Sistemas)
+│       └── dashboard.js  # /api/dashboard (resumo gerencial/financeiro)
+└── public/                # front-end estático (servido direto pela CDN da Vercel)
+    ├── index.html
+    ├── styles.css        # identidade visual Hello Inova
+    ├── app.js            # toda a lógica do front-end (SPA)
+    └── assets/            # logo Hello Inova
 ```
+
+## Contas e usuários
+
+Não existe mais cadastro público pela tela de login. Um novo usuário só pode ser criado por alguém que já está logado, pelo módulo fixo **"Cadastro de Usuário"** no menu — e esse novo usuário entra automaticamente na mesma conta/espaço de trabalho de quem o criou (mesmos sistemas, assinaturas e dashboard).
 
 ## Modelo de dados
 
-- **users**: id, name, email, password_hash, role, created_at
-- **pages** (módulos): id, user_id, name, type (`systems` | `canvas`), order_index, created_at
+- **users**: id, name, email, password_hash, role, account_id (conta/espaço de trabalho ao qual pertence), email_verified, created_at
+- **pages** (módulos, compartilhados por conta via `account_id`): id, user_id (guarda o `account_id` do dono), name, type (`systems` | `dashboard` | `users` | `canvas`), order_index, created_at
 - **elements**: id, page_id, type (`label` | `input` | `button`), content, placeholder, x, y, width, height (em %), font_size, font_color, bg_color, border_radius, font_weight, z_index
-- **systems**: id, user_id, name, url, login_email, login_password_enc (criptografada), created_at, updated_at
+- **systems** (compartilhados por conta): id, user_id (guarda o `account_id` do dono), name, url, login_email, login_password_enc (criptografada), categories, subscriptions, created_at, updated_at
+- **verification_codes** / **login_attempts**: suporte ao login em duas etapas e à trava de força bruta.
 
 ## Sobre o "Login As"
 
@@ -77,6 +90,5 @@ Navegadores impedem que uma página de um site (nesse caso, o próprio Gestor de
 ## Próximos passos sugeridos
 
 - Papéis/permissões diferenciados entre usuários (ex.: administrador x colaborador).
-- Compartilhar módulos entre usuários da mesma organização.
 - Exportar/importar o layout de um módulo em JSON.
 - Publicar a página montada como uma URL pública (modo "visualização" já existe internamente).
