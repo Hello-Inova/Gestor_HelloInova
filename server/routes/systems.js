@@ -16,6 +16,7 @@ const MAX_LOGO_LENGTH = 1_500_000; // ~1.1MB de imagem original (base64 infla ~3
 const MAX_CONTRACT_LENGTH = 7_000_000; // ~5.2MB de arquivo original (base64 infla ~33%)
 const MAX_DOC_FILE_LENGTH = 7_000_000; // ~5.2MB por PDF (base64 infla ~33%)
 const MAX_DOC_FILES = 10; // limite de anexos na "Documentação Sistêmica"
+const MAX_LINKS = 30; // limite de links adicionais por sistema
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -51,6 +52,16 @@ function toPublic(row) {
     }
   } catch (e) { /* documentação inválida — trata como vazia */ }
 
+  let links = [];
+  try {
+    const parsed = JSON.parse(row.links || '[]');
+    if (Array.isArray(parsed)) {
+      links = parsed
+        .filter((l) => l && (typeof l.name === 'string' || typeof l.url === 'string'))
+        .map((l) => ({ name: typeof l.name === 'string' ? l.name : '', url: typeof l.url === 'string' ? l.url : '' }));
+    }
+  } catch (e) { /* links inválidos — trata como vazio */ }
+
   return {
     id: row.id,
     name: row.name,
@@ -69,6 +80,7 @@ function toPublic(row) {
     contract_file: row.contract_file || '',
     contract_file_name: row.contract_file_name || '',
     documentation_files: documentationFiles,
+    links,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -113,6 +125,26 @@ function parseDocumentationFiles(input) {
     files.push({ name, data });
   }
   return { ok: true, files };
+}
+
+// Normaliza e valida a lista de "Links adicionais" (nome + URL livres,
+// além do link de acesso e do repositório). Retorna { ok, links, error }.
+function parseLinks(input) {
+  if (input === undefined) return { ok: true, links: undefined };
+  if (!Array.isArray(input)) return { ok: false, error: 'Lista de links inválida.' };
+  if (input.length > MAX_LINKS) {
+    return { ok: false, error: `Você pode adicionar no máximo ${MAX_LINKS} links.` };
+  }
+
+  const links = [];
+  for (const item of input) {
+    if (!item || typeof item !== 'object') return { ok: false, error: 'Link inválido.' };
+    const name = (typeof item.name === 'string' ? item.name : '').trim().slice(0, 120);
+    const url = (typeof item.url === 'string' ? item.url : '').trim().slice(0, 500);
+    if (!name && !url) continue; // ignora linhas totalmente vazias
+    links.push({ name, url });
+  }
+  return { ok: true, links };
 }
 
 // Normaliza e valida a lista de categorias vinda do cliente.
@@ -200,7 +232,7 @@ router.post(
       categories, subscriptions,
       contact_name = '', contact_whatsapp = '', contact_email = '',
       contract_file = '', contract_file_name = '',
-      documentation_files,
+      documentation_files, links,
     } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
     if (!url || !url.trim()) return res.status(400).json({ error: 'Informe o link de acesso.' });
@@ -217,18 +249,20 @@ router.post(
     if (!contact.ok) return res.status(400).json({ error: contact.error });
     const docs = parseDocumentationFiles(documentation_files);
     if (!docs.ok) return res.status(400).json({ error: docs.error });
+    const linksResult = parseLinks(links);
+    if (!linksResult.ok) return res.status(400).json({ error: linksResult.error });
 
     const inserted = await db.run(
       `INSERT INTO systems
         (user_id, name, url, repo_url, login_email, login_password_enc, logo, categories, subscriptions,
-         contact_name, contact_whatsapp, contact_email, contract_file, contract_file_name, documentation_files)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         contact_name, contact_whatsapp, contact_email, contract_file, contract_file_name, documentation_files, links)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        RETURNING *`,
       req.user.account_id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
       JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || []),
       contact.contact_name, contact.contact_whatsapp, contact.contact_email,
       contract_file || '', (contract_file_name || '').trim().slice(0, 200),
-      JSON.stringify(docs.files || [])
+      JSON.stringify(docs.files || []), JSON.stringify(linksResult.links || [])
     );
 
     res.status(201).json({ system: toPublic(inserted.rows[0]) });
@@ -247,7 +281,7 @@ router.put(
       categories, subscriptions,
       contact_name, contact_whatsapp, contact_email,
       contract_file, contract_file_name,
-      documentation_files,
+      documentation_files, links,
     } = req.body || {};
     if (logo !== undefined && !validLogo(logo)) {
       return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
@@ -267,6 +301,8 @@ router.put(
     if (!contact.ok) return res.status(400).json({ error: contact.error });
     const docs = parseDocumentationFiles(documentation_files);
     if (!docs.ok) return res.status(400).json({ error: docs.error });
+    const linksResult = parseLinks(links);
+    if (!linksResult.ok) return res.status(400).json({ error: linksResult.error });
 
     const newName = typeof name === 'string' && name.trim() ? name.trim() : row.name;
     const newUrl = typeof url === 'string' && url.trim() ? url.trim() : row.url;
@@ -281,16 +317,17 @@ router.put(
     const newContractFileName =
       typeof contract_file_name === 'string' ? contract_file_name.trim().slice(0, 200) : row.contract_file_name;
     const newDocumentationFiles = docs.files === undefined ? row.documentation_files : JSON.stringify(docs.files);
+    const newLinks = linksResult.links === undefined ? row.links : JSON.stringify(linksResult.links);
 
     const updated = await db.run(
       `UPDATE systems SET name=?, url=?, repo_url=?, login_email=?, login_password_enc=?, logo=?,
          categories=?, subscriptions=?, contact_name=?, contact_whatsapp=?, contact_email=?,
-         contract_file=?, contract_file_name=?, documentation_files=?,
+         contract_file=?, contract_file_name=?, documentation_files=?, links=?,
          updated_at=NOW() WHERE id=?
        RETURNING *`,
       newName, newUrl, newRepoUrl, newEmail, newPassEnc, newLogo, newCategories, newSubscriptions,
       contact.contact_name, contact.contact_whatsapp, contact.contact_email,
-      newContractFile, newContractFileName, newDocumentationFiles, row.id
+      newContractFile, newContractFileName, newDocumentationFiles, newLinks, row.id
     );
 
     res.json({ system: toPublic(updated.rows[0]) });

@@ -129,6 +129,7 @@ const SCHEMA_SQL = `
     contract_file TEXT DEFAULT '',
     contract_file_name TEXT DEFAULT '',
     documentation_files TEXT DEFAULT '[]',
+    links TEXT DEFAULT '[]',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
@@ -138,6 +139,7 @@ const SCHEMA_SQL = `
   -- isso colunas adicionadas depois da criação inicial da tabela precisam de
   -- um ALTER TABLE explícito e idempotente como este.
   ALTER TABLE systems ADD COLUMN IF NOT EXISTS documentation_files TEXT DEFAULT '[]';
+  ALTER TABLE systems ADD COLUMN IF NOT EXISTS links TEXT DEFAULT '[]';
 
   -- Códigos de verificação por e-mail (cadastro e login em duas etapas).
   CREATE TABLE IF NOT EXISTS verification_codes (

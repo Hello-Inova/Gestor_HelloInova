@@ -125,8 +125,31 @@
       dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
       cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01"/><path d="M18 12h.01"/>',
       shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',
+      expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+      collapse: '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
+  }
+
+  // Botão de expandir para tela cheia, reutilizado nos modais de
+  // cadastro/edição/detalhes do sistema (formulários grandes, com muitos
+  // campos e listas de assinaturas/links/anexos).
+  function buildExpandToggle() {
+    let expanded = false;
+    const btn = el('button', {
+      class: 'btn btn-ghost btn-icon', type: 'button', title: 'Expandir para tela cheia',
+      html: icon('expand'),
+    });
+    function apply(overlayEl, cardEl) {
+      btn.addEventListener('click', () => {
+        expanded = !expanded;
+        cardEl.classList.toggle('modal-card-fullscreen', expanded);
+        overlayEl.classList.toggle('modal-overlay-fullscreen', expanded);
+        btn.innerHTML = icon(expanded ? 'collapse' : 'expand');
+        btn.title = expanded ? 'Sair da tela cheia' : 'Expandir para tela cheia';
+      });
+    }
+    return { button: btn, apply };
   }
 
   let toastTimer = null;
@@ -1458,6 +1481,93 @@
     return { container, getSubscriptions, hasInvalidValue };
   }
 
+  // ---------------- Links adicionais ----------------
+  // Lista livre de links extras do sistema (nome + URL), além do link de
+  // acesso e do repositório já existentes. Mesmo padrão de linhas
+  // repetíveis usado nas assinaturas.
+
+  // Somente leitura — usado no modal Visualizador.
+  function buildLinksView(links) {
+    links = Array.isArray(links) ? links : [];
+    if (!links.length) {
+      return el('div', {}, [
+        el('div', { class: 'field-section-title' }, ['Links adicionais']),
+        el('div', { class: 'subs-empty' }, ['Nenhum link adicional cadastrado.']),
+      ]);
+    }
+    return el('div', {}, [
+      el('div', { class: 'field-section-title' }, ['Links adicionais']),
+      el('div', { class: 'links-view-list' }, links.map((l) => el('div', { class: 'links-view-row' }, [
+        el('span', { class: 'links-view-name' }, [l.name || 'Link']),
+        el('a', {
+          class: 'links-view-url', href: normalizedUrl(l.url), target: '_blank', rel: 'noopener',
+        }, [l.url || '\u2014']),
+      ]))),
+    ]);
+  }
+
+  // Editável — usado nos modais de criação/edição. Retorna { container, getLinks }.
+  function buildLinksEditor(initialLinks) {
+    const rows = [];
+    const listEl = el('div', { class: 'links-list' });
+    const emptyMsg = el('div', { class: 'subs-empty' }, ['Nenhum link adicional adicionado ainda.']);
+
+    function refreshEmptyState() {
+      emptyMsg.style.display = rows.length ? 'none' : 'block';
+      listEl.style.display = rows.length ? 'flex' : 'none';
+    }
+
+    function addRow(link) {
+      link = link || {};
+      const nameInput = el('input', { type: 'text', placeholder: 'Ex: Painel administrativo', value: link.name || '' });
+      const urlInput = el('input', { type: 'text', placeholder: 'https://...', value: link.url || '' });
+      const removeBtn = el('button', {
+        type: 'button', class: 'btn btn-danger btn-icon subs-remove-btn', title: 'Remover link',
+        html: icon('trash'),
+      });
+
+      const rowEl = el('div', { class: 'links-row' }, [nameInput, urlInput, removeBtn]);
+      const rowObj = { rowEl, nameInput, urlInput };
+      removeBtn.addEventListener('click', () => {
+        const idx = rows.indexOf(rowObj);
+        if (idx >= 0) rows.splice(idx, 1);
+        rowEl.remove();
+        refreshEmptyState();
+      });
+
+      rows.push(rowObj);
+      listEl.appendChild(rowEl);
+      refreshEmptyState();
+    }
+
+    const addBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm' }, [
+      el('span', { html: icon('plus') }), ' Adicionar link',
+    ]);
+    addBtn.addEventListener('click', () => addRow());
+
+    (initialLinks || []).forEach(addRow);
+    refreshEmptyState();
+
+    const header = el('div', { class: 'links-header' }, [
+      el('span', {}, ['Nome do link']),
+      el('span', {}, ['URL']),
+      el('span', {}, ['']),
+    ]);
+
+    const container = el('div', { class: 'field' }, [
+      el('label', {}, ['Links adicionais']),
+      el('div', { class: 'links-editor' }, [header, listEl, emptyMsg, addBtn]),
+    ]);
+
+    function getLinks() {
+      return rows
+        .map((r) => ({ name: r.nameInput.value.trim(), url: r.urlInput.value.trim() }))
+        .filter((l) => l.name || l.url);
+    }
+
+    return { container, getLinks };
+  }
+
   // ---------------- Contato do responsável pelo contrato ----------------
   // Extrai só os dígitos do WhatsApp informado, para montar o link wa.me
   // (aceita qualquer formatação: espaços, parênteses, traços, +55 etc.).
@@ -1783,16 +1893,21 @@
         viewField('Cadastrado em', sys.created_at ? formatDateBR(sys.created_at) : '—'),
         viewField('Atualizado em', sys.updated_at ? formatDateBR(sys.updated_at) : '—'),
       ]),
+      buildLinksView(sys.links),
       buildContactSection(sys),
       buildAttachmentsSection(sys),
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       buildSubscriptionsView(sys.subscriptions),
     ]);
 
+    const expandToggle = buildExpandToggle();
     const card = el('div', { class: 'modal-card view-modal-card' }, [
       el('div', { class: 'modal-header' }, [
         el('h3', {}, ['Detalhes do sistema']),
-        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeViewModal, html: icon('close') }),
+        el('div', { class: 'modal-header-actions' }, [
+          expandToggle.button,
+          el('button', { class: 'btn btn-ghost btn-icon', onclick: closeViewModal, html: icon('close') }),
+        ]),
       ]),
       body,
       el('div', { class: 'modal-footer view-modal-footer' }, [
@@ -1805,10 +1920,12 @@
       ]),
     ]);
 
-    return el('div', {
+    const overlay = el('div', {
       class: 'modal-overlay',
       onclick: (ev) => { if (ev.target === ev.currentTarget) closeViewModal(); },
     }, [card]);
+    expandToggle.apply(overlay, card);
+    return overlay;
   }
 
   function buildViewModalEdit(sys) {
@@ -1839,6 +1956,7 @@
     );
 
     const subsEditor = buildSubscriptionsEditor(sys.subscriptions || []);
+    const linksEditor = buildLinksEditor(sys.links || []);
     const contactFields = buildContactFields(sys);
     const contractField = buildContractFileField(sys);
     const docsField = buildDocumentationFilesField(sys);
@@ -1906,6 +2024,7 @@
           contract_file: contractField.getFile(),
           contract_file_name: contractField.getFileName(),
           documentation_files: docsField.getFiles(),
+          links: linksEditor.getLinks(),
         };
         if (password) body.login_password = password;
         const res = await api('/systems/' + sys.id, { method: 'PUT', body });
@@ -1923,6 +2042,7 @@
       el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link do repositório']), repoUrlInput]),
+      linksEditor.container,
       el('div', { class: 'field' }, [
         el('label', {}, ['Tipo de sistema']),
         categorySelect,
@@ -1947,19 +2067,25 @@
       ]),
     ]);
 
+    const expandToggle = buildExpandToggle();
     const card = el('div', { class: 'modal-card' }, [
       el('div', { class: 'modal-header' }, [
         el('h3', {}, ['Editar sistema']),
-        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeViewModal, html: icon('close') }),
+        el('div', { class: 'modal-header-actions' }, [
+          expandToggle.button,
+          el('button', { class: 'btn btn-ghost btn-icon', onclick: closeViewModal, html: icon('close') }),
+        ]),
       ]),
       body,
       el('div', { class: 'modal-footer' }, [cancelBtn, saveBtn]),
     ]);
 
-    return el('div', {
+    const overlay = el('div', {
       class: 'modal-overlay',
       onclick: (ev) => { if (ev.target === ev.currentTarget) closeViewModal(); },
     }, [card]);
+    expandToggle.apply(overlay, card);
+    return overlay;
   }
 
   // ---------------- Modal: Novo Sistema ----------------
@@ -1986,6 +2112,7 @@
     );
 
     const subsEditor = buildSubscriptionsEditor([]);
+    const linksEditor = buildLinksEditor([]);
     const contactFields = buildContactFields({});
     const contractField = buildContractFileField({});
     const docsField = buildDocumentationFilesField({});
@@ -2057,6 +2184,7 @@
           contract_file: contractField.getFile(),
           contract_file_name: contractField.getFileName(),
           documentation_files: docsField.getFiles(),
+          links: linksEditor.getLinks(),
           login_password: password,
         };
         const res = await api('/systems', { method: 'POST', body });
@@ -2073,6 +2201,7 @@
       el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link do repositório']), repoUrlInput]),
+      linksEditor.container,
       el('div', { class: 'field' }, [
         el('label', {}, ['Tipo de sistema']),
         categorySelect,
@@ -2103,10 +2232,14 @@
       ]),
     ]);
 
+    const expandToggle = buildExpandToggle();
     const card = el('div', { class: 'modal-card' }, [
       el('div', { class: 'modal-header' }, [
         el('h3', {}, ['Novo Sistema']),
-        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeSystemModal, html: icon('close') }),
+        el('div', { class: 'modal-header-actions' }, [
+          expandToggle.button,
+          el('button', { class: 'btn btn-ghost btn-icon', onclick: closeSystemModal, html: icon('close') }),
+        ]),
       ]),
       body,
       el('div', { class: 'modal-footer' }, [
@@ -2115,10 +2248,12 @@
       ]),
     ]);
 
-    return el('div', {
+    const overlay = el('div', {
       class: 'modal-overlay',
       onclick: (ev) => { if (ev.target === ev.currentTarget) closeSystemModal(); },
     }, [card]);
+    expandToggle.apply(overlay, card);
+    return overlay;
   }
 
   // ---------------- Modal: Perfil do usuário ----------------
