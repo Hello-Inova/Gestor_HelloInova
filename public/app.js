@@ -56,15 +56,15 @@
     let data = {};
     try { data = await res.json(); } catch (e) { /* sem corpo */ }
 
-    // Sessão derrubada (inatividade ou token inválido) enquanto achávamos
-    // que o usuário estava logado: volta para a tela de login com um aviso.
+    // Sessão inválida/expirada (ex: cookie removido, token vencido depois de
+    // dias sem acesso) enquanto achávamos que o usuário estava logado: volta
+    // para a tela de login com um aviso.
     if (res.status === 401 && state.user && path !== '/auth/logout') {
       state.user = null;
       state.pages = [];
       state.systems = null;
       state.selectedPageId = null;
       state.selectedElementId = null;
-      clearTimeout(inactivityTimer);
       toast(data.error || 'Sessão expirada. Faça login novamente.', true);
       render();
     }
@@ -77,35 +77,6 @@
     }
     return data;
   }
-
-  // ---------------- Logout automático por inatividade (client-side) ----------------
-  // Espelha, no navegador, a janela deslizante de 15 minutos do servidor:
-  // sem nenhuma interação do usuário nesse período, encerra a sessão
-  // proativamente (além do servidor já rejeitar o próximo request via 401).
-  const INACTIVITY_LIMIT_MS = 15 * 60 * 1000;
-  let inactivityTimer = null;
-
-  function resetInactivityTimer() {
-    clearTimeout(inactivityTimer);
-    if (!state.user) return;
-    inactivityTimer = setTimeout(handleInactivityLogout, INACTIVITY_LIMIT_MS);
-  }
-
-  async function handleInactivityLogout() {
-    if (!state.user) return;
-    await api('/auth/logout', { method: 'POST' }).catch(() => {});
-    state.user = null;
-    state.pages = [];
-    state.systems = null;
-    state.selectedPageId = null;
-    state.selectedElementId = null;
-    toast('Sessão encerrada após 15 minutos de inatividade.', true);
-    render();
-  }
-
-  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach((evt) => {
-    document.addEventListener(evt, resetInactivityTimer, { passive: true });
-  });
 
   function el(tag, attrs, children) {
     const node = document.createElement(tag);
@@ -206,7 +177,6 @@
       const { user } = await api('/auth/me');
       state.user = user;
       await Promise.all([loadPages(), loadSystems()]);
-      resetInactivityTimer();
     } catch (e) {
       state.user = null;
     }
@@ -402,7 +372,6 @@
           state.authPending = null;
           state.authStep = 'form';
           await Promise.all([loadPages(), loadSystems()]);
-          resetInactivityTimer();
           render();
         } catch (err) {
           submitBtn.disabled = false;
@@ -694,7 +663,6 @@
           state.systems = null;
           state.selectedPageId = null;
           state.selectedElementId = null;
-          clearTimeout(inactivityTimer);
           render();
         },
         html: icon('logout'),

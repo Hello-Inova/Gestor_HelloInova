@@ -4,13 +4,13 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'helloinova-dev-secret-troque-em-producao';
 const COOKIE_NAME = 'hi_session';
 
-// Sessão com expiração deslizante: o token dura 15 minutos, mas toda
-// requisição autenticada (requireAuth) emite um novo token com mais 15
-// minutos e reseta o cookie. Ou seja, enquanto a pessoa estiver usando o
-// sistema a sessão nunca expira — mas 15 minutos sem nenhuma requisição
-// (aba fechada, computador hibernando, etc.) derruba a sessão e exige
-// login novamente. Isso implementa o "logout automático por inatividade".
-const SESSION_TTL_SECONDS = 15 * 60;
+// Sessão de longa duração, sem logout automático por inatividade: o token
+// dura 7 dias e toda requisição autenticada (requireAuth) emite um novo
+// token com mais 7 dias, renovando o cookie (janela deslizante). Ou seja, a
+// pessoa continua logada mesmo depois de dias sem usar o sistema, desde que
+// volte a acessar antes do prazo expirar — só é exigido login novamente se
+// ficar 7 dias inteiros sem nenhuma requisição, ou ao fazer logout manual.
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function hashPassword(password) {
   return bcrypt.hashSync(password, 10);
@@ -52,7 +52,7 @@ function requireAuth(req, res, next) {
     setAuthCookie(res, fresh);
     next();
   } catch (err) {
-    return res.status(401).json({ error: 'Sessão expirada por inatividade. Faça login novamente.' });
+    return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
   }
 }
 
