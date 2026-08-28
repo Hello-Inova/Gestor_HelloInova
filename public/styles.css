@@ -250,6 +250,7 @@ button { font-family: inherit; }
 }
 
 .field { margin-bottom: 16px; }
+.field-full { margin-bottom: 16px; }
 .field label {
   display: block;
   font-size: 12.5px;
@@ -1156,6 +1157,43 @@ button { font-family: inherit; }
   border-radius: 0;
 }
 .modal-overlay.modal-overlay-fullscreen { padding: 0; }
+
+/* Em tela cheia o corpo do formulário vira uma grade de 2 colunas, com
+   largura máxima centralizada — evita que cada campo estique de ponta a
+   ponta da tela (incluindo o seletor de "Tipo de sistema", que antes
+   ficava esticado e feio). Seções mais longas (listas de links, anexos,
+   assinaturas, aviso) ganham a classe .field-full (ou já têm uma classe
+   própria, como .field-section-title/.subs-editor/.hint-box) para ocupar
+   as duas colunas inteiras. */
+.modal-card-fullscreen .modal-body:not(.view-modal-body) {
+  max-width: 1040px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 0 28px;
+}
+.modal-card-fullscreen .modal-body:not(.view-modal-body) > .field-full,
+.modal-card-fullscreen .modal-body:not(.view-modal-body) > .field-section-title,
+.modal-card-fullscreen .modal-body:not(.view-modal-body) > .subs-editor,
+.modal-card-fullscreen .modal-body:not(.view-modal-body) > .hint-box {
+  grid-column: 1 / -1;
+}
+.modal-card-fullscreen .category-select { max-height: 190px; }
+
+@media (max-width: 900px) {
+  .modal-card-fullscreen .modal-body:not(.view-modal-body) { grid-template-columns: 1fr; max-width: 100%; }
+}
+
+/* Visualizador (somente leitura) em tela cheia: mantém a própria grade
+   interna (.view-modal-grid), só centraliza e limita a largura do
+   conteúdo para não esticar de ponta a ponta. */
+.view-modal-card.modal-card-fullscreen .view-modal-body {
+  max-width: 1040px;
+  margin: 0 auto;
+  width: 100%;
+}
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;

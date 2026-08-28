@@ -1554,7 +1554,7 @@
       el('span', {}, ['']),
     ]);
 
-    const container = el('div', { class: 'field' }, [
+    const container = el('div', { class: 'field field-full' }, [
       el('label', {}, ['Links adicionais']),
       el('div', { class: 'links-editor' }, [header, listEl, emptyMsg, addBtn]),
     ]);
@@ -1589,7 +1589,7 @@
       type: 'text', placeholder: 'responsavel@empresa.com', value: sys.contact_email || '',
     });
 
-    const container = el('div', {}, [
+    const container = el('div', { class: 'field-full' }, [
       el('div', { class: 'field-section-title' }, ['Responsável pelo contrato']),
       el('div', { class: 'field' }, [el('label', {}, ['Nome do responsável']), nameInput]),
       el('div', { class: 'sysmgr-grid' }, [
@@ -1702,7 +1702,7 @@
       },
     }, ['Remover']);
 
-    const container = el('div', { class: 'field' }, [
+    const container = el('div', { class: 'field field-full' }, [
       el('label', {}, ['Contrato (PDF ou imagem, até 5MB)']),
       el('div', { class: 'logo-upload contract-upload' }, [
         preview,
@@ -1782,7 +1782,7 @@
       el('span', { html: icon('upload') }), ' Anexar PDF',
     ]);
 
-    const container = el('div', { class: 'field' }, [
+    const container = el('div', { class: 'field field-full' }, [
       el('label', {}, ['Documentação Sistêmica (PDF, até 5MB cada — pode anexar vários arquivos)']),
       el('div', { class: 'logo-upload contract-upload doc-files-upload' }, [
         list,
@@ -2224,7 +2224,7 @@
           el('div', { class: 'logo-upload-actions' }, [logoFileInput, logoPickBtn, logoRemoveBtn]),
         ]),
       ]),
-      el('div', { class: 'hint-box' }, [
+      el('div', { class: 'hint-box field-full' }, [
         el('span', { html: icon('info') }),
         el('span', {}, [
           'Por segurança dos navegadores, não é possível preencher automaticamente o formulário de login de outro site a partir daqui. O "Login As" salva o sistema, abre-o em uma nova aba e copia a senha para você colar (Ctrl+V) — o e-mail aparece no aviso para copiar também.',
