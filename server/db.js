@@ -128,9 +128,16 @@ const SCHEMA_SQL = `
     contact_email TEXT DEFAULT '',
     contract_file TEXT DEFAULT '',
     contract_file_name TEXT DEFAULT '',
+    documentation_files TEXT DEFAULT '[]',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+
+  -- "CREATE TABLE IF NOT EXISTS" acima não adiciona colunas novas a uma
+  -- tabela que já existe (ex: produção, com sistemas já cadastrados) — por
+  -- isso colunas adicionadas depois da criação inicial da tabela precisam de
+  -- um ALTER TABLE explícito e idempotente como este.
+  ALTER TABLE systems ADD COLUMN IF NOT EXISTS documentation_files TEXT DEFAULT '[]';
 
   -- Códigos de verificação por e-mail (cadastro e login em duas etapas).
   CREATE TABLE IF NOT EXISTS verification_codes (

@@ -85,7 +85,7 @@ A rota de backend `POST /api/auth/register` continua existindo (sem tela própri
 - **users**: id, name, email, password_hash, role, account_id (conta/espaço de trabalho ao qual pertence), email_verified, created_at
 - **pages** (módulos, compartilhados por conta via `account_id`): id, user_id (guarda o `account_id` do dono), name, type (`systems` | `dashboard` | `users` | `canvas`), order_index, created_at
 - **elements**: id, page_id, type (`label` | `input` | `button`), content, placeholder, x, y, width, height (em %), font_size, font_color, bg_color, border_radius, font_weight, z_index
-- **systems** (compartilhados por conta): id, user_id (guarda o `account_id` do dono), name, url, login_email, login_password_enc (criptografada), categories, subscriptions, created_at, updated_at
+- **systems** (compartilhados por conta): id, user_id (guarda o `account_id` do dono), name, url, login_email, login_password_enc (criptografada), categories, subscriptions, contract_file (anexo único de contrato), documentation_files (lista de PDFs da "Documentação Sistêmica"), created_at, updated_at
 - **verification_codes** / **login_attempts**: suporte ao login em duas etapas e à trava de força bruta.
 - **password_resets**: tokens de recuperação de senha (link por e-mail), com hash SHA-256 do token, expiração de 30 minutos e uso único.
 

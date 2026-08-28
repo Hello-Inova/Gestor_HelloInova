@@ -1627,6 +1627,109 @@
     ]);
   }
 
+  // ---------------- Documentação Sistêmica (múltiplos PDFs) ----------------
+  // Mesmo padrão de anexo em base64 do contrato, mas aceitando vários
+  // arquivos por sistema (só PDF).
+  const MAX_DOC_FILES = 10;
+
+  function docFileChip(fileName) {
+    return el('span', { class: 'contract-file-chip doc-file-chip' }, [
+      el('span', { html: icon('file') }),
+      el('span', { class: 'contract-file-name' }, [fileName || 'documento.pdf']),
+    ]);
+  }
+
+  // Editável — usado nos modais de criação/edição. Retorna { container, getFiles }.
+  function buildDocumentationFilesField(sys) {
+    sys = sys || {};
+    let files = Array.isArray(sys.documentation_files)
+      ? sys.documentation_files.map((f) => ({ name: f.name || '', data: f.data || '' }))
+      : [];
+
+    const list = el('div', { class: 'doc-files-list' });
+
+    function renderList() {
+      list.innerHTML = '';
+      if (!files.length) {
+        list.appendChild(el('span', { class: 'contract-empty-hint' }, ['Nenhum documento anexado.']));
+        return;
+      }
+      files.forEach((f, idx) => {
+        const removeBtn = el('button', {
+          class: 'btn btn-ghost btn-icon btn-sm', type: 'button', title: 'Remover',
+          onclick: () => { files = files.filter((_, i) => i !== idx); renderList(); },
+          html: icon('trash'),
+        });
+        list.appendChild(el('div', { class: 'doc-file-row' }, [docFileChip(f.name), removeBtn]));
+      });
+    }
+    renderList();
+
+    const fileInput = el('input', { type: 'file', accept: 'application/pdf', multiple: true });
+    fileInput.addEventListener('change', () => {
+      const picked = Array.from(fileInput.files || []);
+      fileInput.value = '';
+      if (!picked.length) return;
+      if (files.length + picked.length > MAX_DOC_FILES) {
+        toast(`Você pode anexar no máximo ${MAX_DOC_FILES} arquivos na documentação sistêmica.`, true);
+        return;
+      }
+      picked.forEach((file) => {
+        if (file.type !== 'application/pdf') {
+          toast(`"${file.name}" não é um PDF.`, true);
+          return;
+        }
+        if (file.size > 5_200_000) {
+          toast(`"${file.name}" é muito grande. Escolha um arquivo de até ~5MB.`, true);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          files.push({ name: file.name || 'documento.pdf', data: String(reader.result) });
+          renderList();
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    const pickBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => fileInput.click() }, [
+      el('span', { html: icon('upload') }), ' Anexar PDF',
+    ]);
+
+    const container = el('div', { class: 'field' }, [
+      el('label', {}, ['Documentação Sistêmica (PDF, até 5MB cada — pode anexar vários arquivos)']),
+      el('div', { class: 'logo-upload contract-upload doc-files-upload' }, [
+        list,
+        el('div', { class: 'logo-upload-actions' }, [fileInput, pickBtn]),
+      ]),
+    ]);
+
+    return { container, getFiles: () => files };
+  }
+
+  // Somente leitura — usado no modal Visualizador.
+  function buildDocumentationSection(sys) {
+    const files = Array.isArray(sys.documentation_files) ? sys.documentation_files : [];
+
+    if (!files.length) {
+      return el('div', {}, [
+        el('div', { class: 'field-section-title' }, ['Documentação Sistêmica']),
+        el('div', { class: 'subs-empty' }, ['Nenhum documento anexado.']),
+      ]);
+    }
+
+    return el('div', {}, [
+      el('div', { class: 'field-section-title' }, ['Documentação Sistêmica']),
+      el('div', { class: 'doc-files-view-list' }, files.map((f) => el('div', { class: 'contract-card' }, [
+        docFileChip(f.name),
+        el('a', {
+          class: 'btn btn-ghost btn-sm contact-btn',
+          href: f.data, download: f.name || 'documento.pdf',
+        }, [el('span', { html: icon('download') }), ' Baixar']),
+      ]))),
+    ]);
+  }
+
   function buildViewModalView(sys) {
     const categories = Array.isArray(sys.categories) ? sys.categories : [];
 
@@ -1697,6 +1800,7 @@
       ]),
       buildContactSection(sys),
       buildContractSection(sys),
+      buildDocumentationSection(sys),
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       buildSubscriptionsView(sys.subscriptions),
     ]);
@@ -1753,6 +1857,7 @@
     const subsEditor = buildSubscriptionsEditor(sys.subscriptions || []);
     const contactFields = buildContactFields(sys);
     const contractField = buildContractFileField(sys);
+    const docsField = buildDocumentationFilesField(sys);
 
     let logoData = sys.logo || '';
     const logoPreview = el('div', { class: 'logo-preview' }, [
@@ -1816,6 +1921,7 @@
           contact_email: contactFields.emailInput.value.trim(),
           contract_file: contractField.getFile(),
           contract_file_name: contractField.getFileName(),
+          documentation_files: docsField.getFiles(),
         };
         if (password) body.login_password = password;
         const res = await api('/systems/' + sys.id, { method: 'PUT', body });
@@ -1845,6 +1951,7 @@
       ]),
       contactFields.container,
       contractField.container,
+      docsField.container,
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       subsEditor.container,
       el('div', { class: 'field' }, [
@@ -1897,6 +2004,7 @@
     const subsEditor = buildSubscriptionsEditor([]);
     const contactFields = buildContactFields({});
     const contractField = buildContractFileField({});
+    const docsField = buildDocumentationFilesField({});
 
     const passToggle = el('button', {
       type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
@@ -1964,6 +2072,7 @@
           contact_email: contactFields.emailInput.value.trim(),
           contract_file: contractField.getFile(),
           contract_file_name: contractField.getFileName(),
+          documentation_files: docsField.getFiles(),
           login_password: password,
         };
         const res = await api('/systems', { method: 'POST', body });
@@ -1992,6 +2101,7 @@
       ]),
       contactFields.container,
       contractField.container,
+      docsField.container,
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       subsEditor.container,
       el('div', { class: 'field' }, [

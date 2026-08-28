@@ -928,6 +928,13 @@ button { font-family: inherit; }
   padding: 12px 14px;
 }
 
+/* ---- Documentação Sistêmica (múltiplos PDFs) ---- */
+.doc-files-upload { align-items: flex-start; }
+.doc-files-list { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.doc-file-row { display: flex; align-items: center; gap: 8px; }
+.doc-file-row .doc-file-chip { flex: 1; min-width: 0; }
+.doc-files-view-list { display: flex; flex-direction: column; gap: 8px; }
+
 @media (max-width: 640px) {
   .sysmgr-grid { grid-template-columns: 1fr; }
   .sysmgr-row-main { flex-wrap: wrap; }

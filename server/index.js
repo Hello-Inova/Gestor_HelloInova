@@ -20,8 +20,9 @@ const PORT = process.env.PORT || 3000;
 // gerando links errados (ex: no e-mail de recuperação de senha).
 app.set('trust proxy', 1);
 
-// Limite maior para caber o anexo de contrato (base64) além da logo do sistema.
-app.use(express.json({ limit: '8mb' }));
+// Limite maior para caber vários anexos em base64 (logo, contrato e os PDFs
+// da documentação sistêmica) numa mesma requisição.
+app.use(express.json({ limit: '30mb' }));
 app.use(cookieParser());
 
 // Garante que o schema do Postgres já exista antes de qualquer rota rodar
