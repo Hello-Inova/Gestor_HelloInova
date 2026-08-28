@@ -933,7 +933,29 @@ button { font-family: inherit; }
 .doc-files-list { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
 .doc-file-row { display: flex; align-items: center; gap: 8px; }
 .doc-file-row .doc-file-chip { flex: 1; min-width: 0; }
-.doc-files-view-list { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---- Anexos (contrato + documentação sistêmica) no Visualizador ---- */
+/* Todos os anexos numa linha só, lado a lado (quebra para a linha de baixo
+   só se não couberem). */
+.attachments-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-0);
+  text-decoration: none;
+  max-width: 220px;
+}
+.attachment-chip:hover { border-color: rgba(47, 123, 255, 0.4); background: rgba(47, 123, 255, 0.1); }
+.attachment-chip svg { flex-shrink: 0; }
+.attachment-chip svg:first-child { color: var(--blue-400); }
+.attachment-chip svg:last-child { color: var(--text-2); }
+.attachment-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 640px) {
   .sysmgr-grid { grid-template-columns: 1fr; }

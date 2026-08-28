@@ -1603,30 +1603,6 @@
     return { container, getFile: () => fileData, getFileName: () => fileName };
   }
 
-  // Somente leitura — usado no modal Visualizador.
-  function buildContractSection(sys) {
-    const fileData = sys.contract_file || '';
-    const fileName = sys.contract_file_name || '';
-
-    if (!fileData) {
-      return el('div', {}, [
-        el('div', { class: 'field-section-title' }, ['Contrato']),
-        el('div', { class: 'subs-empty' }, ['Nenhum contrato anexado.']),
-      ]);
-    }
-
-    return el('div', {}, [
-      el('div', { class: 'field-section-title' }, ['Contrato']),
-      el('div', { class: 'contract-card' }, [
-        contractChip(fileData, fileName),
-        el('a', {
-          class: 'btn btn-ghost btn-sm contact-btn',
-          href: fileData, download: fileName || 'contrato',
-        }, [el('span', { html: icon('download') }), ' Baixar']),
-      ]),
-    ]);
-  }
-
   // ---------------- Documentação Sistêmica (múltiplos PDFs) ----------------
   // Mesmo padrão de anexo em base64 do contrato, mas aceitando vários
   // arquivos por sistema (só PDF).
@@ -1707,25 +1683,34 @@
     return { container, getFiles: () => files };
   }
 
-  // Somente leitura — usado no modal Visualizador.
-  function buildDocumentationSection(sys) {
-    const files = Array.isArray(sys.documentation_files) ? sys.documentation_files : [];
+  // Somente leitura — usado no modal Visualizador. Junta o contrato e todos
+  // os PDFs da documentação sistêmica numa única lista, lado a lado (o
+  // usuário pediu os anexos "em uma linha só").
+  function buildAttachmentsSection(sys) {
+    const items = [];
+    if (sys.contract_file) {
+      items.push({ name: sys.contract_file_name || 'contrato', data: sys.contract_file });
+    }
+    (Array.isArray(sys.documentation_files) ? sys.documentation_files : []).forEach((f) => {
+      items.push({ name: f.name || 'documento.pdf', data: f.data });
+    });
 
-    if (!files.length) {
+    if (!items.length) {
       return el('div', {}, [
-        el('div', { class: 'field-section-title' }, ['Documentação Sistêmica']),
-        el('div', { class: 'subs-empty' }, ['Nenhum documento anexado.']),
+        el('div', { class: 'field-section-title' }, ['Anexos']),
+        el('div', { class: 'subs-empty' }, ['Nenhum anexo cadastrado.']),
       ]);
     }
 
     return el('div', {}, [
-      el('div', { class: 'field-section-title' }, ['Documentação Sistêmica']),
-      el('div', { class: 'doc-files-view-list' }, files.map((f) => el('div', { class: 'contract-card' }, [
-        docFileChip(f.name),
-        el('a', {
-          class: 'btn btn-ghost btn-sm contact-btn',
-          href: f.data, download: f.name || 'documento.pdf',
-        }, [el('span', { html: icon('download') }), ' Baixar']),
+      el('div', { class: 'field-section-title' }, ['Anexos']),
+      el('div', { class: 'attachments-row' }, items.map((it) => el('a', {
+        class: 'attachment-chip',
+        href: it.data, download: it.name, title: 'Baixar ' + it.name,
+      }, [
+        el('span', { html: icon(/^data:application\/pdf/.test(it.data) ? 'file' : 'image') }),
+        el('span', { class: 'attachment-chip-name' }, [it.name]),
+        el('span', { html: icon('download') }),
       ]))),
     ]);
   }
@@ -1799,8 +1784,7 @@
         viewField('Atualizado em', sys.updated_at ? formatDateBR(sys.updated_at) : '—'),
       ]),
       buildContactSection(sys),
-      buildContractSection(sys),
-      buildDocumentationSection(sys),
+      buildAttachmentsSection(sys),
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       buildSubscriptionsView(sys.subscriptions),
     ]);
