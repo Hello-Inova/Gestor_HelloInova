@@ -1235,6 +1235,19 @@ button { font-family: inherit; }
 }
 .password-toggle:hover { color: var(--text-0); background: rgba(255,255,255,0.06); }
 
+/* ---- Toggle de mostrar/ocultar senha no Visualizador (somente leitura) ---- */
+.password-view-row { display: flex; align-items: center; gap: 6px; }
+.password-view-value { word-break: break-all; }
+.password-view-toggle {
+  width: 26px; height: 26px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--text-2); cursor: pointer;
+  border-radius: 6px;
+}
+.password-view-toggle:hover { color: var(--text-0); background: rgba(255,255,255,0.06); }
+.password-view-toggle:disabled { opacity: 0.5; cursor: default; }
+
 .logo-upload {
   display: flex;
   align-items: center;

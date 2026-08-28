@@ -1333,6 +1333,47 @@
     ]);
   }
 
+  // Campo "Senha" do Visualizador (somente leitura), com um botão de
+  // olho para mostrar/ocultar — a senha só é buscada do servidor (via
+  // /reveal, decifrada na hora) na primeira vez que o usuário clica para
+  // mostrar, e fica em cache no fechamento (closure) enquanto o modal
+  // estiver aberto, para não pedir de novo a cada toggle.
+  function buildPasswordViewField(sys) {
+    if (!sys.has_password) return viewField('Senha', '—');
+
+    let revealedPassword = null;
+    let showing = false;
+
+    const valueEl = el('span', { class: 'vv password-view-value' }, ['••••••••']);
+    const toggleBtn = el('button', {
+      type: 'button', class: 'password-view-toggle', title: 'Mostrar senha',
+      html: icon('eye'),
+    });
+    toggleBtn.addEventListener('click', async () => {
+      if (!showing && revealedPassword === null) {
+        toggleBtn.disabled = true;
+        try {
+          const reveal = await api('/systems/' + sys.id + '/reveal');
+          revealedPassword = reveal.login_password || '';
+        } catch (err) {
+          toast(err.message, true);
+          toggleBtn.disabled = false;
+          return;
+        }
+        toggleBtn.disabled = false;
+      }
+      showing = !showing;
+      valueEl.textContent = showing ? (revealedPassword || '—') : '••••••••';
+      toggleBtn.innerHTML = icon(showing ? 'eyeOff' : 'eye');
+      toggleBtn.title = showing ? 'Ocultar senha' : 'Mostrar senha';
+    });
+
+    return el('div', { class: 'view-field' }, [
+      el('span', { class: 'vk' }, ['Senha']),
+      el('div', { class: 'password-view-row' }, [valueEl, toggleBtn]),
+    ]);
+  }
+
   function buildViewModal() {
     return state.viewModal.mode === 'edit' ? buildViewModalEdit(state.viewModal.system) : buildViewModalView(state.viewModal.system);
   }
@@ -1886,7 +1927,7 @@
       ]),
       el('div', { class: 'view-modal-grid' }, [
         viewField('E-mail de acesso', sys.login_email || '—'),
-        viewField('Senha', sys.has_password ? '••••••••' : '—'),
+        buildPasswordViewField(sys),
         viewField('Repositório', sys.repo_url
           ? el('a', { href: normalizedUrl(sys.repo_url), target: '_blank', rel: 'noopener' }, [sys.repo_url])
           : '—'),
