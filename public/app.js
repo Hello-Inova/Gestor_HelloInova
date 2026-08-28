@@ -1591,8 +1591,8 @@
 
     const container = el('div', { class: 'field-full' }, [
       el('div', { class: 'field-section-title' }, ['Responsável pelo contrato']),
-      el('div', { class: 'field' }, [el('label', {}, ['Nome do responsável']), nameInput]),
-      el('div', { class: 'sysmgr-grid' }, [
+      el('div', { class: 'contact-fields-grid' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Nome do responsável']), nameInput]),
         el('div', { class: 'field' }, [el('label', {}, ['WhatsApp']), whatsappInput]),
         el('div', { class: 'field' }, [el('label', {}, ['E-mail de contato']), emailInput]),
       ]),
@@ -2039,11 +2039,18 @@
     });
 
     const body = el('div', { class: 'modal-body' }, [
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Logo do sistema']),
+        el('div', { class: 'logo-upload' }, [
+          logoPreview,
+          el('div', { class: 'logo-upload-actions' }, [logoFileInput, logoPickBtn, logoRemoveBtn]),
+        ]),
+      ]),
       el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link do repositório']), repoUrlInput]),
       linksEditor.container,
-      el('div', { class: 'field' }, [
+      el('div', { class: 'field field-tall' }, [
         el('label', {}, ['Tipo de sistema']),
         categorySelect,
         el('div', { class: 'field-hint' }, ['Segure Ctrl (ou Cmd no Mac) para selecionar mais de uma opção.']),
@@ -2058,13 +2065,6 @@
       docsField.container,
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       subsEditor.container,
-      el('div', { class: 'field' }, [
-        el('label', {}, ['Logo do sistema']),
-        el('div', { class: 'logo-upload' }, [
-          logoPreview,
-          el('div', { class: 'logo-upload-actions' }, [logoFileInput, logoPickBtn, logoRemoveBtn]),
-        ]),
-      ]),
     ]);
 
     const expandToggle = buildExpandToggle();
@@ -2198,11 +2198,18 @@
     });
 
     const body = el('div', { class: 'modal-body' }, [
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Logo do sistema']),
+        el('div', { class: 'logo-upload' }, [
+          logoPreview,
+          el('div', { class: 'logo-upload-actions' }, [logoFileInput, logoPickBtn, logoRemoveBtn]),
+        ]),
+      ]),
       el('div', { class: 'field' }, [el('label', {}, ['Nome do sistema']), nameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link de acesso ao sistema']), urlInput]),
       el('div', { class: 'field' }, [el('label', {}, ['Link do repositório']), repoUrlInput]),
       linksEditor.container,
-      el('div', { class: 'field' }, [
+      el('div', { class: 'field field-tall' }, [
         el('label', {}, ['Tipo de sistema']),
         categorySelect,
         el('div', { class: 'field-hint' }, ['Segure Ctrl (ou Cmd no Mac) para selecionar mais de uma opção.']),
@@ -2217,13 +2224,6 @@
       docsField.container,
       el('div', { class: 'field-section-title' }, ['Assinaturas']),
       subsEditor.container,
-      el('div', { class: 'field' }, [
-        el('label', {}, ['Logo do sistema']),
-        el('div', { class: 'logo-upload' }, [
-          logoPreview,
-          el('div', { class: 'logo-upload-actions' }, [logoFileInput, logoPickBtn, logoRemoveBtn]),
-        ]),
-      ]),
       el('div', { class: 'hint-box field-full' }, [
         el('span', { html: icon('info') }),
         el('span', {}, [

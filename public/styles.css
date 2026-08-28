@@ -37,6 +37,10 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
+  /* O app é sempre escuro (sem modo claro) — isso faz os controles nativos
+     do navegador (ícone do seletor de data, setas do input numérico etc.)
+     desenharem no tom escuro em vez do padrão claro do sistema. */
+  color-scheme: dark;
 }
 
 body {
@@ -878,6 +882,17 @@ button { font-family: inherit; }
 .hint-box svg { flex-shrink: 0; margin-top: 1px; color: var(--blue-400); }
 
 /* ---- Responsável pelo contrato (contato) ---- */
+.contact-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.contact-fields-grid .field { margin-bottom: 0; }
+
+@media (max-width: 640px) {
+  .contact-fields-grid { grid-template-columns: 1fr; }
+}
+
 .contact-card {
   display: flex;
   align-items: center;
@@ -1179,6 +1194,12 @@ button { font-family: inherit; }
 .modal-card-fullscreen .modal-body:not(.view-modal-body) > .hint-box {
   grid-column: 1 / -1;
 }
+/* "Tipo de sistema" ocupa as duas linhas da coluna (select alto), o que
+   empurra o campo seguinte da mesma coluna (Senha) para ficar exatamente
+   embaixo do campo da coluna ao lado (E-mail). */
+.modal-card-fullscreen .modal-body:not(.view-modal-body) > .field-tall {
+  grid-row: span 2;
+}
 .modal-card-fullscreen .category-select { max-height: 190px; }
 
 @media (max-width: 900px) {
@@ -1341,7 +1362,26 @@ button { font-family: inherit; }
   border-radius: var(--radius-sm);
   padding: 8px;
 }
-.subs-row input { margin: 0; }
+/* As linhas de assinatura não ficam dentro de um ".field" (só o editor
+   inteiro fica), então os inputs aqui não herdavam o estilo escuro
+   padrão e apareciam com o fundo branco do navegador — por isso
+   precisam do próprio estilo, igual ao de ".field input". */
+.subs-row input {
+  margin: 0;
+  width: 100%;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  padding: 9px 11px;
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.subs-row input:focus {
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px rgba(47, 123, 255, 0.18);
+}
 .subs-remove-btn { flex-shrink: 0; }
 .subs-empty {
   font-size: 12.5px;
