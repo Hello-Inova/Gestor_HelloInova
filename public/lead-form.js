@@ -74,7 +74,7 @@
     error: '',
     step1: { name: '', whatsapp: '', email: '' },
     step2: {
-      services: [],
+      service: '',
       otherService: '',
       businessSegment: '',
       businessSegmentOther: '',
@@ -179,9 +179,11 @@
       })),
       field('WhatsApp', el('input', {
         type: 'tel',
+        inputmode: 'numeric',
         value: state.step1.whatsapp,
-        placeholder: '(11) 91234-5678',
-        oninput: (e) => (state.step1.whatsapp = e.target.value),
+        placeholder: '(11) 9 1234-5678',
+        maxlength: '16',
+        oninput: (e) => (state.step1.whatsapp = applyPhoneMask(e.target)),
       })),
       field('E-mail', el('input', {
         type: 'email',
@@ -205,6 +207,52 @@
 
   function validEmail(v) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v || '');
+  }
+
+  // ---------- Máscara de telefone: (xx) x xxxx-xxxx ----------
+  // Formata progressivamente conforme o usuário digita (funciona também
+  // para números incompletos, colar o número já formatado, apagar dígitos
+  // no meio etc.) e reposiciona o cursor pelo número de dígitos que havia
+  // antes dele, não pelo índice de caractere — senão o cursor pularia para
+  // o fim do campo a cada tecla, atrapalhando a digitação/edição.
+  function formatPhoneBR(raw) {
+    const digits = (raw || '').replace(/\D/g, '').slice(0, 11);
+    const len = digits.length;
+    if (len === 0) return '';
+    if (len <= 2) return '(' + digits;
+    let out = '(' + digits.slice(0, 2) + ')';
+    out += ' ' + digits.slice(2, 3);
+    if (len <= 3) return out;
+    out += ' ' + digits.slice(3, 7);
+    if (len <= 7) return out;
+    out += '-' + digits.slice(7, 11);
+    return out;
+  }
+
+  function countDigits(str) {
+    return (str.match(/\d/g) || []).length;
+  }
+
+  function caretPosForDigitCount(formatted, digitCount) {
+    if (digitCount <= 0) return 0;
+    let count = 0;
+    for (let i = 0; i < formatted.length; i++) {
+      if (/\d/.test(formatted[i])) {
+        count++;
+        if (count === digitCount) return i + 1;
+      }
+    }
+    return formatted.length;
+  }
+
+  function applyPhoneMask(input) {
+    const caret = input.selectionStart || 0;
+    const digitsBeforeCaret = countDigits(input.value.slice(0, caret));
+    const formatted = formatPhoneBR(input.value);
+    input.value = formatted;
+    const newPos = caretPosForDigitCount(formatted, digitsBeforeCaret);
+    input.setSelectionRange(newPos, newPos);
+    return formatted;
   }
 
   async function submitStep1() {
@@ -246,8 +294,8 @@
     return el('div', {}, [
       el('h1', {}, ['Sobre o seu projeto']),
       el('p', { class: 'sub' }, ['Essa parte é opcional, mas nos ajuda a te atender melhor.']),
-      field('Serviço desejado', buildServiceChips()),
-      state.step2.services.includes('Outro') ? el('div', { class: 'lead-other-input' }, [
+      field('Serviço desejado', buildServiceSelect()),
+      state.step2.service === 'Outro' ? el('div', { class: 'field lead-other-input' }, [
         el('input', {
           type: 'text',
           value: state.step2.otherService,
@@ -256,7 +304,7 @@
         }),
       ]) : null,
       field('Ramo de negócio', buildSegmentCombobox()),
-      state.step2.businessSegment === 'Outros' ? el('div', { class: 'lead-segment-other' }, [
+      state.step2.businessSegment === 'Outros' ? el('div', { class: 'field lead-segment-other' }, [
         el('input', {
           type: 'text',
           value: state.step2.businessSegmentOther,
@@ -280,23 +328,19 @@
     ]);
   }
 
-  function buildServiceChips() {
-    return el('div', { class: 'service-chips' }, SERVICES.map((svc) => {
-      const checked = state.step2.services.includes(svc);
-      return el('label', { class: 'service-chip' + (checked ? ' checked' : '') }, [
-        el('input', {
-          type: 'checkbox',
-          onchange: () => {
-            const idx = state.step2.services.indexOf(svc);
-            if (idx >= 0) state.step2.services.splice(idx, 1);
-            else state.step2.services.push(svc);
-            render();
-          },
-        }),
-        el('span', { class: 'chip-check' }, [svgIcon('<path d="M20 6 9 17l-5-5"/>', 11)]),
-        svc,
-      ]);
-    }));
+  function buildServiceSelect() {
+    const select = el('select', {}, [
+      el('option', { value: '' }, ['Selecione o serviço desejado']),
+      ...SERVICES.map((svc) => el('option', {
+        value: svc,
+        selected: svc === state.step2.service ? 'selected' : null,
+      }, [svc])),
+    ]);
+    select.addEventListener('change', () => {
+      state.step2.service = select.value;
+      render();
+    });
+    return select;
   }
 
   // Combobox pesquisável do ramo de negócio. Importante: digitar aqui NÃO
@@ -390,7 +434,7 @@
       await api(`/leads/${state.leadId}/step2`, {
         method: 'PATCH',
         body: {
-          services: state.step2.services,
+          services: state.step2.service ? [state.step2.service] : [],
           business_segment: state.step2.businessSegment,
           business_segment_other: state.step2.businessSegment === 'Outros' ? state.step2.businessSegmentOther.trim() : '',
           description: buildFinalDescription(),
@@ -405,12 +449,12 @@
     }
   }
 
-  // Quando "Outro" é marcado em Serviços, anexamos a especificação digitada
-  // à descrição para não perder essa informação (o campo services guarda só
-  // as opções fixas).
+  // Quando "Outro" é selecionado em Serviço desejado, anexamos a
+  // especificação digitada à descrição para não perder essa informação (o
+  // campo services enviado à API guarda só as opções fixas).
   function buildFinalDescription() {
     let desc = state.step2.description.trim();
-    if (state.step2.services.includes('Outro') && state.step2.otherService.trim()) {
+    if (state.step2.service === 'Outro' && state.step2.otherService.trim()) {
       const extra = `Outro serviço: ${state.step2.otherService.trim()}`;
       desc = desc ? `${desc}\n\n${extra}` : extra;
     }
