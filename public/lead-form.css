@@ -80,14 +80,20 @@
 }
 
 /* ---------- Serviços (checkboxes em formato de chip) ---------- */
+/* Grade (em vez de flex-wrap) para que cada chip ocupe uma coluna de
+   largura igual — com flex-wrap, rótulos de tamanhos bem diferentes (ex:
+   "Website" vs "E-mail Corporativo") deixavam linhas com bastante espaço
+   vazio, principalmente em telas estreitas. auto-fill encolhe para 1
+   coluna sozinho quando a tela é pequena demais para 2. */
 .service-chips {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
 }
 .service-chip {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   padding: 9px 14px;
   border-radius: 999px;
@@ -95,6 +101,7 @@
   background: var(--panel-2);
   color: var(--text-1);
   font-size: 13px;
+  text-align: center;
   cursor: pointer;
   user-select: none;
   transition: background 0.2s, border-color 0.2s, color 0.2s;

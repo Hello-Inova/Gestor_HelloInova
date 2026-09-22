@@ -1386,7 +1386,7 @@
 
     const grid = el('div', { class: 'view-modal-grid' }, [
       viewField('Nome completo', lead.name),
-      viewField('WhatsApp', lead.whatsapp),
+      viewFieldWhatsApp('WhatsApp', lead.whatsapp),
       viewField('E-mail', lead.email),
       viewField('Origem', lead.source || '—'),
       viewField('Serviços desejados', services.length ? services.join(', ') : '—'),
@@ -1581,6 +1581,26 @@
     return el('div', { class: 'view-field' }, [
       el('span', { class: 'vk' }, [label]),
       el('span', { class: 'vv' }, [value]),
+    ]);
+  }
+
+  // Mesmo padrão do viewField, mas para números de WhatsApp: o valor vira
+  // um link clicável (número + ícone) que abre uma conversa direto no
+  // WhatsApp (wa.me). Reaproveita whatsappDigits(), já usado no "Responsável
+  // pelo contrato" do Visualizador de sistemas.
+  function viewFieldWhatsApp(label, raw) {
+    const value = (raw || '').trim();
+    const digits = whatsappDigits(value);
+    if (!value || !digits) return viewField(label, value || '—');
+    return el('div', { class: 'view-field' }, [
+      el('span', { class: 'vk' }, [label]),
+      el('a', {
+        class: 'vv view-whatsapp-link',
+        href: 'https://wa.me/' + digits,
+        target: '_blank',
+        rel: 'noopener',
+        title: 'Iniciar conversa no WhatsApp',
+      }, [el('span', { class: 'view-whatsapp-icon', html: icon('whatsapp') }), value]),
     ]);
   }
 
