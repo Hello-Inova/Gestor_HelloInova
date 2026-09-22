@@ -78,6 +78,7 @@ const SCHEMA_SQL = `
     role TEXT NOT NULL DEFAULT 'admin',
     systems_seeded INTEGER NOT NULL DEFAULT 0,
     dashboard_seeded INTEGER NOT NULL DEFAULT 0,
+    leads_seeded INTEGER NOT NULL DEFAULT 0,
     email_verified INTEGER NOT NULL DEFAULT 0,
     account_id INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -140,6 +141,33 @@ const SCHEMA_SQL = `
   -- um ALTER TABLE explícito e idempotente como este.
   ALTER TABLE systems ADD COLUMN IF NOT EXISTS documentation_files TEXT DEFAULT '[]';
   ALTER TABLE systems ADD COLUMN IF NOT EXISTS links TEXT DEFAULT '[]';
+
+  -- Mesma lógica: "users" já existia em produção antes do módulo de Leads,
+  -- então a coluna de seeding precisa do ALTER TABLE idempotente também.
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS leads_seeded INTEGER NOT NULL DEFAULT 0;
+
+  -- Leads captados pelo formulário público (public/captacao.html). Tabela
+  -- sem "user_id"/"account_id": o formulário público não tem contexto de
+  -- autenticação para atribuir o lead a uma conta específica, então os
+  -- leads formam uma caixa de entrada única, compartilhada por todas as
+  -- contas do Gestor (mesmo modelo do restante do app hoje, que é
+  -- essencialmente mono-tenant).
+  CREATE TABLE IF NOT EXISTS leads (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    whatsapp TEXT NOT NULL,
+    email TEXT NOT NULL,
+    services TEXT DEFAULT '[]',
+    business_segment TEXT DEFAULT '',
+    business_segment_other TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    referrer_url TEXT DEFAULT '',
+    source TEXT DEFAULT '',
+    step_completed INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'novo',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
 
   -- Códigos de verificação por e-mail (cadastro e login em duas etapas).
   CREATE TABLE IF NOT EXISTS verification_codes (

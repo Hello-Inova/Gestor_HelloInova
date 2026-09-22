@@ -10,6 +10,7 @@ const authRoutes = require('./routes/auth');
 const pageRoutes = require('./routes/pages');
 const systemRoutes = require('./routes/systems');
 const dashboardRoutes = require('./routes/dashboard');
+const leadRoutes = require('./routes/leads');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +38,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/pages', pageRoutes);
 app.use('/api/systems', systemRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/leads', leadRoutes);
 
 // Frontend estático — precisa estar em public/** na raiz do projeto (a
 // Vercel serve esse diretório direto pela CDN e ignora express.static() nas
@@ -44,6 +46,12 @@ app.use('/api/dashboard', dashboardRoutes);
 // diretório).
 const CLIENT_DIR = path.join(__dirname, '..', 'public');
 app.use(express.static(CLIENT_DIR));
+
+// URL amigável (sem ".html") para o formulário público de captação de leads,
+// pensada para ser usada em bio do Instagram/links externos.
+app.get('/captacao', (req, res) => {
+  res.sendFile(path.join(CLIENT_DIR, 'captacao.html'));
+});
 
 // Qualquer rota não-API cai no SPA (index.html cuida do roteamento client-side)
 app.get(/^(?!\/api).*/, (req, res) => {

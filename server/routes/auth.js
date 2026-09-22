@@ -197,7 +197,17 @@ router.post(
       'users',
       2
     );
-    await db.run('UPDATE users SET systems_seeded = 1, dashboard_seeded = 1 WHERE id = ?', userId);
+    await db.run(
+      'INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)',
+      userId,
+      'Leads',
+      'leads',
+      3
+    );
+    await db.run(
+      'UPDATE users SET systems_seeded = 1, dashboard_seeded = 1, leads_seeded = 1 WHERE id = ?',
+      userId
+    );
 
     const code = await createVerificationCode(normalizedEmail, 'register', userId);
     await sendVerificationEmail({ to: normalizedEmail, name: name.trim(), code, purpose: 'register' });

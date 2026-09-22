@@ -41,11 +41,39 @@ async function ensureSystemsModule(accountId) {
   await db.run('UPDATE users SET systems_seeded = 1 WHERE id = ?', accountId);
 }
 
+// Mesma rede de segurança acima, para o módulo especial "Leads" (contas
+// criadas antes deste recurso existir precisam ganhá-lo na primeira
+// listagem, sem duplicar caso já tenha sido criado/removido de propósito).
+async function ensureLeadsModule(accountId) {
+  const user = await db.get('SELECT leads_seeded FROM users WHERE id = ?', accountId);
+  if (!user || user.leads_seeded) return;
+
+  const clash = await db.get(
+    "SELECT id, name FROM pages WHERE user_id = ? AND type != 'leads' AND lower(name) = 'leads'",
+    accountId
+  );
+  if (clash) {
+    await db.run('UPDATE pages SET name = ? WHERE id = ?', clash.name + ' (antigo)', clash.id);
+  }
+
+  const maxOrderRow = await db.get(
+    'SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?',
+    accountId
+  );
+  await db.run(
+    "INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Leads', 'leads', ?)",
+    accountId,
+    Number(maxOrderRow.m) + 1
+  );
+  await db.run('UPDATE users SET leads_seeded = 1 WHERE id = ?', accountId);
+}
+
 // Lista módulos da conta, com seus elementos
 router.get(
   '/',
   ah(async (req, res) => {
     await ensureSystemsModule(req.user.account_id);
+    await ensureLeadsModule(req.user.account_id);
 
     const pages = await db.all(
       'SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC',
@@ -55,7 +83,7 @@ router.get(
     const result = await Promise.all(
       pages.map(async (p) => ({
         ...p,
-        elements: p.type === 'systems' ? [] : await db.all('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC', p.id),
+        elements: p.type === 'systems' || p.type === 'leads' ? [] : await db.all('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC', p.id),
       }))
     );
     res.json({ pages: result });

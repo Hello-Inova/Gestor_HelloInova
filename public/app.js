@@ -28,6 +28,10 @@
     userModal: false,
     forgotPasswordOpen: false, // pop-up "esqueci minha senha" (pede o e-mail)
     resetToken: null, // token vindo do link do e-mail de recuperação de senha
+    leads: null, // lista de leads captados (módulo "Leads")
+    leadsSearch: '',
+    leadsFilterStatus: [],
+    leadModal: null, // lead sendo visualizado no pop-up de detalhes
   };
 
   // Se a página foi aberta a partir do link de recuperação de senha
@@ -127,6 +131,8 @@
       shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',
       expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
       collapse: '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
+      target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+      link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
   }
@@ -250,6 +256,7 @@
       if (state.profileModal) $app.appendChild(buildProfileModal());
       if (state.viewModal) $app.appendChild(buildViewModal());
       if (state.userModal) $app.appendChild(buildUserModal());
+      if (state.leadModal) $app.appendChild(buildLeadModal());
     }
     // Estes dois pop-ups funcionam por cima de qualquer tela (mesmo
     // deslogado), já que o objetivo é justamente recuperar o acesso.
@@ -921,7 +928,8 @@
     const isSystems = page && page.type === 'systems';
     const isDashboard = page && page.type === 'dashboard';
     const isUsers = page && page.type === 'users';
-    const isSpecial = isSystems || isDashboard || isUsers;
+    const isLeads = page && page.type === 'leads';
+    const isSpecial = isSystems || isDashboard || isUsers || isLeads;
 
     const header = el('div', { class: 'main-header' }, [
       el('div', { class: 'page-title-wrap' }, [
@@ -937,6 +945,11 @@
           class: 'btn btn-primary btn-sm',
           onclick: () => { state.userModal = true; render(); },
         }, [el('span', { html: icon('plus') }), ' Novo Usuário']),
+      ]) : (isLeads ? el('div', { class: 'toolbox' }, [
+        el('button', {
+          class: 'btn btn-ghost btn-sm',
+          onclick: () => copyLeadFormLink(),
+        }, [el('span', { html: icon('link') }), ' Copiar link do formulário']),
       ]) : (isSpecial ? null : el('div', { class: 'toolbox' }, [
         toolboxBtn('type', 'Texto', () => addElement('label')),
         toolboxBtn('input', 'Campo', () => addElement('input')),
@@ -946,7 +959,7 @@
           el('button', { class: state.mode === 'edit' ? 'active' : '', onclick: () => { state.mode = 'edit'; render(); } }, ['Editar']),
           el('button', { class: state.mode === 'preview' ? 'active' : '', onclick: () => { state.mode = 'preview'; state.selectedElementId = null; render(); } }, ['Visualizar']),
         ]),
-      ]))),
+      ])))),
     ]);
 
     main.appendChild(header);
@@ -963,6 +976,11 @@
 
     if (isUsers) {
       main.appendChild(buildUsersManager());
+      return main;
+    }
+
+    if (isLeads) {
+      main.appendChild(buildLeadsManager());
       return main;
     }
 
@@ -1172,6 +1190,239 @@
     return el('div', {
       class: 'modal-overlay',
       onclick: (ev) => { if (ev.target === ev.currentTarget) closeUserModal(); },
+    }, [card]);
+  }
+
+  // ---------------- Leads (módulo especial) ----------------
+  // Leads captados pelo formulário público (public/captacao.html). A lista
+  // não tem ação de "criar" pelo Gestor — os leads só entram pelo
+  // formulário público; aqui só é possível visualizar, mudar o status e
+  // excluir.
+  const LEAD_STATUS_LABELS = {
+    novo: 'Novo',
+    em_contato: 'Em contato',
+    convertido: 'Convertido',
+    perdido: 'Perdido',
+  };
+  const LEAD_STATUS_ORDER = ['novo', 'em_contato', 'convertido', 'perdido'];
+
+  function copyLeadFormLink() {
+    const link = window.location.origin + '/captacao';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(
+        () => toast('Link do formulário copiado: ' + link),
+        () => toast(link)
+      );
+    } else {
+      toast(link);
+    }
+  }
+
+  function buildLeadsManager() {
+    const wrap = el('div', { class: 'canvas-scroll' });
+    const inner = el('div', { class: 'sysmgr' });
+
+    const listCard = el('div', { class: 'sysmgr-card grow' });
+    listCard.appendChild(el('div', { class: 'sysmgr-header-row' }, [
+      el('div', { class: 'htext' }, [
+        el('h3', {}, [el('span', { html: icon('target') }), ' Leads captados']),
+        el('p', { class: 'sysmgr-sub' }, ['Pessoas que preencheram o formulário público de captação.']),
+      ]),
+    ]));
+
+    // ---- Pesquisa ----
+    const searchInput = el('input', {
+      type: 'search',
+      class: 'sysmgr-search-input',
+      placeholder: 'Pesquisar por nome, WhatsApp ou e-mail…',
+      value: state.leadsSearch || '',
+    });
+    searchInput.addEventListener('input', () => {
+      state.leadsSearch = searchInput.value;
+      refreshList();
+    });
+    listCard.appendChild(el('div', { class: 'sysmgr-search' }, [
+      el('span', { class: 'search-icon', html: icon('search') }),
+      searchInput,
+    ]));
+
+    // ---- Filtros por status ----
+    const filterBar = el('div', { class: 'sysmgr-filters' });
+    LEAD_STATUS_ORDER.forEach((st) => {
+      const active = state.leadsFilterStatus.includes(st);
+      const chip = el('button', { type: 'button', class: 'filter-chip' + (active ? ' active' : '') }, [LEAD_STATUS_LABELS[st]]);
+      chip.addEventListener('click', () => {
+        const idx = state.leadsFilterStatus.indexOf(st);
+        if (idx >= 0) state.leadsFilterStatus.splice(idx, 1);
+        else state.leadsFilterStatus.push(st);
+        render();
+      });
+      filterBar.appendChild(chip);
+    });
+    if (state.leadsFilterStatus.length) {
+      const clearBtn = el('button', { type: 'button', class: 'filter-chip clear' }, ['Limpar filtros']);
+      clearBtn.addEventListener('click', () => { state.leadsFilterStatus = []; render(); });
+      filterBar.appendChild(clearBtn);
+    }
+    listCard.appendChild(filterBar);
+
+    const listBody = el('div', { class: 'sysmgr-list' }, [
+      el('div', { class: 'dashboard-loading' }, ['Carregando leads…']),
+    ]);
+    listCard.appendChild(listBody);
+
+    function applyFilters() {
+      const all = state.leads || [];
+      const term = (state.leadsSearch || '').trim().toLowerCase();
+      const statuses = state.leadsFilterStatus;
+      return all.filter((lead) => {
+        if (term) {
+          const hay = [lead.name, lead.whatsapp, lead.email].filter(Boolean).join(' ').toLowerCase();
+          if (!hay.includes(term)) return false;
+        }
+        if (statuses.length && !statuses.includes(lead.status)) return false;
+        return true;
+      });
+    }
+
+    function refreshList() {
+      listBody.innerHTML = '';
+      const all = state.leads || [];
+      const filtered = applyFilters();
+      if (!all.length) {
+        listBody.appendChild(el('div', { class: 'sysmgr-empty' }, [
+          'Nenhum lead captado ainda. Compartilhe o link do formulário (botão no topo da página) para começar a receber.',
+        ]));
+      } else if (!filtered.length) {
+        listBody.appendChild(el('div', { class: 'sysmgr-empty' }, ['Nenhum lead encontrado com a pesquisa/filtros atuais.']));
+      } else {
+        filtered.forEach((lead) => listBody.appendChild(buildLeadRow(lead)));
+      }
+    }
+
+    api('/leads')
+      .then(({ leads }) => {
+        state.leads = leads;
+        refreshList();
+      })
+      .catch((err) => {
+        listBody.innerHTML = '';
+        listBody.appendChild(el('div', { class: 'dashboard-error' }, ['Não foi possível carregar os leads: ' + err.message]));
+      });
+
+    inner.appendChild(listCard);
+    wrap.appendChild(inner);
+    return wrap;
+  }
+
+  function buildLeadRow(lead) {
+    const statusBadge = el('span', { class: 'category-badge lead-status-badge status-' + lead.status }, [LEAD_STATUS_LABELS[lead.status] || lead.status]);
+    const sourceBadge = lead.source
+      ? el('span', { class: 'category-badge muted' }, [lead.source])
+      : null;
+    const step2Badge = lead.step_completed >= 2
+      ? null
+      : el('span', { class: 'category-badge muted' }, ['Só etapa 1']);
+
+    const viewBtn = el('button', {
+      class: 'btn btn-primary btn-sm', title: 'Visualizar lead', type: 'button',
+      onclick: () => openLeadModal(lead),
+    }, [el('span', { html: icon('eye') }), el('span', { class: 'lbl' }, [' Visualizar'])]);
+
+    const mainRow = el('div', { class: 'sysmgr-row-main' }, [
+      el('div', { class: 'sysmgr-row-icon' }, [(lead.name || '?').trim().charAt(0).toUpperCase()]),
+      el('div', { class: 'sysmgr-row-info' }, [
+        el('div', { class: 'r-name' }, [lead.name]),
+        el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [lead.whatsapp + ' · ' + lead.email]),
+        el('div', { class: 'sysmgr-row-badges' }, [statusBadge, sourceBadge, step2Badge]),
+      ]),
+      el('div', { class: 'sysmgr-row-main-actions' }, [viewBtn]),
+    ]);
+
+    return el('div', { class: 'sysmgr-row' }, [mainRow]);
+  }
+
+  function openLeadModal(lead) {
+    state.leadModal = { lead };
+    render();
+  }
+  function closeLeadModal() {
+    state.leadModal = null;
+    render();
+  }
+
+  async function updateLeadStatus(lead, newStatus) {
+    try {
+      const { lead: updated } = await api('/leads/' + lead.id, { method: 'PUT', body: { status: newStatus } });
+      state.leads = (state.leads || []).map((l) => (l.id === updated.id ? updated : l));
+      if (state.leadModal && state.leadModal.lead.id === updated.id) state.leadModal.lead = updated;
+      render();
+      toast('Status atualizado.');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function deleteLead(lead) {
+    if (!window.confirm('Excluir o lead "' + lead.name + '"? Essa ação não pode ser desfeita.')) return;
+    try {
+      await api('/leads/' + lead.id, { method: 'DELETE' });
+      state.leads = (state.leads || []).filter((l) => l.id !== lead.id);
+      closeLeadModal();
+      toast('Lead excluído.');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  function buildLeadModal() {
+    const lead = state.leadModal.lead;
+    const services = Array.isArray(lead.services) ? lead.services : [];
+
+    const statusSelect = el('select', {}, LEAD_STATUS_ORDER.map((st) =>
+      el('option', { value: st, selected: st === lead.status ? 'selected' : null }, [LEAD_STATUS_LABELS[st]])
+    ));
+    statusSelect.addEventListener('change', () => updateLeadStatus(lead, statusSelect.value));
+
+    const grid = el('div', { class: 'view-modal-grid' }, [
+      viewField('Nome completo', lead.name),
+      viewField('WhatsApp', lead.whatsapp),
+      viewField('E-mail', lead.email),
+      viewField('Origem', lead.source || '—'),
+      viewField('Serviços desejados', services.length ? services.join(', ') : '—'),
+      viewField('Ramo de negócio', lead.business_segment === 'Outros' && lead.business_segment_other
+        ? lead.business_segment_other
+        : (lead.business_segment || '—')),
+      viewField('Etapa preenchida', lead.step_completed >= 2 ? 'Etapa 1 e 2' : 'Apenas etapa 1'),
+      viewField('Recebido em', formatDateBR(lead.created_at)),
+    ]);
+
+    const body = el('div', { class: 'modal-body view-modal-body' }, [
+      grid,
+      lead.description ? el('div', { class: 'field-full' }, [
+        el('div', { class: 'field-section-title' }, ['Necessidade descrita']),
+        el('p', { class: 'view-description' }, [lead.description]),
+      ]) : null,
+      el('div', { class: 'field', style: 'margin-top:18px;max-width:240px;' }, [
+        el('label', {}, ['Status']),
+        statusSelect,
+      ]),
+    ]);
+
+    const card = el('div', { class: 'modal-card view-modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Lead: ' + lead.name]),
+        el('div', { class: 'modal-header-actions' }, [
+          el('button', { class: 'btn btn-danger btn-icon', title: 'Excluir lead', onclick: () => deleteLead(lead), html: icon('trash') }),
+          el('button', { class: 'btn btn-ghost btn-icon', onclick: closeLeadModal, html: icon('close') }),
+        ]),
+      ]),
+      body,
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (ev) => { if (ev.target === ev.currentTarget) closeLeadModal(); },
     }, [card]);
   }
 
@@ -1542,7 +1793,7 @@
         el('span', { class: 'links-view-name' }, [l.name || 'Link']),
         el('a', {
           class: 'links-view-url', href: normalizedUrl(l.url), target: '_blank', rel: 'noopener',
-        }, [l.url || '\u2014']),
+        }, [l.url || '—']),
       ]))),
     ]);
   }

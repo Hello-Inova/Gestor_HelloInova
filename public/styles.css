@@ -1528,3 +1528,23 @@ button { font-family: inherit; }
   .main-header .page-title-wrap h2 { font-size: 16px; }
   .btn-sm span.lbl { display: none; }
 }
+
+/* ============================================================
+   Módulo Leads
+   ============================================================ */
+.view-description {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--text-1);
+  font-size: 13.5px;
+  line-height: 1.6;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.lead-status-badge.status-novo { background: rgba(47, 123, 255, 0.14); color: var(--blue-400); border-color: rgba(47, 123, 255, 0.35); }
+.lead-status-badge.status-em_contato { background: rgba(255, 191, 71, 0.14); color: #ffbf47; border-color: rgba(255, 191, 71, 0.35); }
+.lead-status-badge.status-convertido { background: rgba(47, 224, 160, 0.14); color: var(--success); border-color: rgba(47, 224, 160, 0.35); }
+.lead-status-badge.status-perdido { background: rgba(255, 84, 112, 0.12); color: var(--danger); border-color: rgba(255, 84, 112, 0.3); }

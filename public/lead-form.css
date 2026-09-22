@@ -1,0 +1,242 @@
+/* ============================================================
+   Formulário público de captação de leads (public/captacao.html)
+   Reaproveita os tokens e a tela .auth-screen/.auth-brand/.auth-card
+   de styles.css (mesma identidade visual do login) e adiciona apenas
+   o que é específico deste formulário: stepper, chips de serviço e
+   o combobox pesquisável de ramo de negócio.
+   ============================================================ */
+
+.ic { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
+
+.lead-card {
+  width: 100%;
+  max-width: 460px;
+  background: linear-gradient(180deg, var(--panel), var(--bg-1));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 34px 30px;
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.6);
+  animation: auth-card-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.lead-card h1 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.lead-card .sub {
+  color: var(--text-2);
+  font-size: 13.5px;
+  margin: 0 0 22px;
+  line-height: 1.5;
+}
+
+/* ---------- Stepper ---------- */
+.lead-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 26px;
+}
+.lead-stepper .step-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-2);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  flex: none;
+  transition: background 0.25s, border-color 0.25s, color 0.25s;
+}
+.lead-stepper .step-dot.active {
+  background: linear-gradient(135deg, var(--blue-700), var(--blue-500));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px -4px var(--blue-glow);
+}
+.lead-stepper .step-dot.done {
+  background: rgba(47, 224, 160, 0.15);
+  border-color: rgba(47, 224, 160, 0.4);
+  color: var(--success);
+}
+.lead-stepper .step-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.lead-stepper .step-label {
+  font-size: 11.5px;
+  color: var(--text-2);
+  margin-left: -2px;
+  white-space: nowrap;
+}
+
+/* ---------- Serviços (checkboxes em formato de chip) ---------- */
+.service-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.service-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text-1);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.service-chip:hover { border-color: var(--border-strong); }
+.service-chip input { display: none; }
+.service-chip .chip-check {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  transition: background 0.2s, border-color 0.2s;
+}
+.service-chip .chip-check svg { opacity: 0; transform: scale(0.6); transition: opacity 0.15s, transform 0.15s; }
+.service-chip.checked {
+  background: rgba(47, 123, 255, 0.14);
+  border-color: var(--blue-500);
+  color: var(--text-0);
+}
+.service-chip.checked .chip-check {
+  background: linear-gradient(135deg, var(--blue-700), var(--blue-500));
+  border-color: transparent;
+}
+.service-chip.checked .chip-check svg { opacity: 1; transform: scale(1); }
+
+.lead-other-input { margin-top: 10px; }
+
+/* ---------- Combobox pesquisável (ramo de negócio) ---------- */
+.combobox { position: relative; }
+.combobox-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  cursor: pointer;
+}
+.combobox-input-wrap:focus-within,
+.combobox-input-wrap.open { border-color: var(--blue-500); box-shadow: 0 0 0 3px rgba(47, 123, 255, 0.15); }
+.combobox-input-wrap input {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--text-0);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 11px 0;
+  outline: none;
+}
+.combobox-input-wrap input::placeholder { color: var(--text-2); }
+.combobox-chevron { color: var(--text-2); flex: none; transition: transform 0.2s; }
+.combobox-input-wrap.open .combobox-chevron { transform: rotate(180deg); }
+
+.combobox-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.55);
+  z-index: 20;
+  padding: 6px;
+}
+.combobox-option {
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.combobox-option:hover,
+.combobox-option.highlighted { background: rgba(47, 123, 255, 0.16); color: var(--text-0); }
+.combobox-option.selected { color: var(--blue-400); font-weight: 600; }
+.combobox-option.other-option { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px; }
+.combobox-empty { padding: 12px; font-size: 13px; color: var(--text-2); text-align: center; }
+
+.lead-segment-other { margin-top: 10px; }
+
+/* ---------- Navegação entre etapas ---------- */
+.lead-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+}
+.lead-actions .btn { flex: 1; }
+
+.lead-skip {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 4px;
+}
+.lead-skip:hover { color: var(--text-1); text-decoration: underline; }
+
+/* ---------- Estado de sucesso ---------- */
+.lead-success {
+  text-align: center;
+  padding: 12px 0 4px;
+}
+.lead-success .success-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(47, 224, 160, 0.14);
+  border: 1px solid rgba(47, 224, 160, 0.4);
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+}
+.lead-success h1 { margin-bottom: 10px; }
+.lead-success .sub { margin-bottom: 4px; }
+
+.lead-form-error {
+  background: rgba(255, 84, 112, 0.1);
+  border: 1px solid rgba(255, 84, 112, 0.3);
+  color: var(--danger);
+  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+
+@media (max-width: 860px) {
+  .auth-screen { grid-template-columns: 1fr; }
+  .auth-brand { display: none; }
+  .auth-form-wrap { padding: 20px; }
+}
