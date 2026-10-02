@@ -68,12 +68,39 @@ async function ensureLeadsModule(accountId) {
   await db.run('UPDATE users SET leads_seeded = 1 WHERE id = ?', accountId);
 }
 
+// Garante o módulo fixo de recrutamento para contas existentes. A flag
+// impede duplicação e preserva a decisão caso o módulo seja removido.
+async function ensureCandidatesModule(accountId) {
+  const user = await db.get('SELECT candidates_seeded FROM users WHERE id = ?', accountId);
+  if (!user || user.candidates_seeded) return;
+
+  const clash = await db.get(
+    "SELECT id, name FROM pages WHERE user_id = ? AND type != 'candidates' AND lower(name) = 'candidatos'",
+    accountId
+  );
+  if (clash) {
+    await db.run('UPDATE pages SET name = ? WHERE id = ?', clash.name + ' (antigo)', clash.id);
+  }
+
+  const maxOrderRow = await db.get(
+    'SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?',
+    accountId
+  );
+  await db.run(
+    "INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Candidatos', 'candidates', ?)",
+    accountId,
+    Number(maxOrderRow.m) + 1
+  );
+  await db.run('UPDATE users SET candidates_seeded = 1 WHERE id = ?', accountId);
+}
+
 // Lista módulos da conta, com seus elementos
 router.get(
   '/',
   ah(async (req, res) => {
     await ensureSystemsModule(req.user.account_id);
     await ensureLeadsModule(req.user.account_id);
+    await ensureCandidatesModule(req.user.account_id);
 
     const pages = await db.all(
       'SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC',
@@ -83,7 +110,9 @@ router.get(
     const result = await Promise.all(
       pages.map(async (p) => ({
         ...p,
-        elements: p.type === 'systems' || p.type === 'leads' ? [] : await db.all('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC', p.id),
+        elements: ['systems', 'dashboard', 'users', 'leads', 'candidates'].includes(p.type)
+          ? []
+          : await db.all('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC', p.id),
       }))
     );
     res.json({ pages: result });

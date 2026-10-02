@@ -79,6 +79,7 @@ const SCHEMA_SQL = `
     systems_seeded INTEGER NOT NULL DEFAULT 0,
     dashboard_seeded INTEGER NOT NULL DEFAULT 0,
     leads_seeded INTEGER NOT NULL DEFAULT 0,
+    candidates_seeded INTEGER NOT NULL DEFAULT 0,
     email_verified INTEGER NOT NULL DEFAULT 0,
     account_id INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -145,6 +146,7 @@ const SCHEMA_SQL = `
   -- Mesma lógica: "users" já existia em produção antes do módulo de Leads,
   -- então a coluna de seeding precisa do ALTER TABLE idempotente também.
   ALTER TABLE users ADD COLUMN IF NOT EXISTS leads_seeded INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS candidates_seeded INTEGER NOT NULL DEFAULT 0;
 
   -- Leads captados pelo formulário público (public/captacao.html). Tabela
   -- sem "user_id"/"account_id": o formulário público não tem contexto de
@@ -164,6 +166,26 @@ const SCHEMA_SQL = `
     referrer_url TEXT DEFAULT '',
     source TEXT DEFAULT '',
     step_completed INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'novo',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  -- Candidatos à vaga de SDR recebidos pelo formulário público externo.
+  -- Mantemos os dados de recrutamento separados dos leads comerciais para
+  -- que cada módulo tenha seu próprio fluxo e status.
+  CREATE TABLE IF NOT EXISTS candidates (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    whatsapp TEXT NOT NULL,
+    email TEXT NOT NULL,
+    location TEXT NOT NULL,
+    instagram_url TEXT NOT NULL,
+    prospecting_experience TEXT NOT NULL,
+    desired_commission NUMERIC(5,2) NOT NULL,
+    motivation TEXT NOT NULL,
+    consented_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    source TEXT NOT NULL DEFAULT 'formulario_sdr',
     status TEXT NOT NULL DEFAULT 'novo',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

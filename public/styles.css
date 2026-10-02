@@ -1560,3 +1560,162 @@ button { font-family: inherit; }
 .lead-status-badge.status-em_contato { background: rgba(255, 191, 71, 0.14); color: #ffbf47; border-color: rgba(255, 191, 71, 0.35); }
 .lead-status-badge.status-convertido { background: rgba(47, 224, 160, 0.14); color: var(--success); border-color: rgba(47, 224, 160, 0.35); }
 .lead-status-badge.status-perdido { background: rgba(255, 84, 112, 0.12); color: var(--danger); border-color: rgba(255, 84, 112, 0.3); }
+
+/* ============================================================
+   Módulo Candidatos
+   ============================================================ */
+.candidate-grid-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+
+.candidate-grid {
+  min-width: 1050px;
+}
+
+.candidate-grid-header,
+.candidate-grid-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.35fr) minmax(210px, 1.45fr) minmax(145px, 1fr) 90px 120px 105px 54px;
+  align-items: center;
+  gap: 14px;
+}
+
+.candidate-grid-header {
+  min-height: 44px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.candidate-grid-row {
+  min-height: 76px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.18s ease;
+}
+
+.candidate-grid-row:last-child { border-bottom: 0; }
+.candidate-grid-row:hover { background: rgba(47, 123, 255, 0.045); }
+
+.candidate-cell {
+  min-width: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.candidate-primary,
+.candidate-contact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.candidate-primary > div:last-child,
+.candidate-contact {
+  display: grid;
+  gap: 3px;
+}
+
+.candidate-primary strong,
+.candidate-contact strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-primary span,
+.candidate-contact span {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid rgba(47, 123, 255, 0.32);
+  border-radius: 10px;
+  background: rgba(47, 123, 255, 0.13);
+  color: var(--blue-400);
+  font-weight: 800;
+}
+
+.candidate-commission { color: var(--blue-400); font-weight: 700; }
+.candidate-actions { display: flex; justify-content: flex-end; }
+
+.candidate-status-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.candidate-status-badge.status-novo { background: rgba(47, 123, 255, 0.14); color: var(--blue-400); border-color: rgba(47, 123, 255, 0.35); }
+.candidate-status-badge.status-em_analise { background: rgba(255, 191, 71, 0.14); color: #ffbf47; border-color: rgba(255, 191, 71, 0.35); }
+.candidate-status-badge.status-entrevista { background: rgba(167, 112, 255, 0.14); color: #bd91ff; border-color: rgba(167, 112, 255, 0.35); }
+.candidate-status-badge.status-aprovado { background: rgba(47, 224, 160, 0.14); color: var(--success); border-color: rgba(47, 224, 160, 0.35); }
+.candidate-status-badge.status-recusado { background: rgba(255, 84, 112, 0.12); color: var(--danger); border-color: rgba(255, 84, 112, 0.3); }
+
+.candidate-grid-empty {
+  padding: 42px 22px;
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .candidate-grid-scroll { overflow: visible; border: 0; background: transparent; }
+  .candidate-grid { min-width: 0; }
+  .candidate-grid-header { display: none; }
+  .candidate-grid-body { display: grid; gap: 10px; }
+  .candidate-grid-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px 18px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-2);
+  }
+  .candidate-cell { grid-column: 1 / -1; }
+  .candidate-primary { grid-column: 1; }
+  .candidate-actions { grid-column: 2; grid-row: 1; align-self: center; }
+  .candidate-contact,
+  .candidate-cell[data-label="Experiência"],
+  .candidate-cell[data-label="Comissão"],
+  .candidate-cell[data-label="Status"],
+  .candidate-cell[data-label="Recebido em"] {
+    display: grid;
+    grid-template-columns: 105px 1fr;
+    align-items: start;
+    gap: 8px;
+  }
+  .candidate-cell[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .candidate-primary::before,
+  .candidate-actions::before { display: none; }
+}

@@ -32,6 +32,10 @@
     leadsSearch: '',
     leadsFilterStatus: [],
     leadModal: null, // lead sendo visualizado no pop-up de detalhes
+    candidates: null, // candidaturas recebidas pelo formulário público de SDR
+    candidatesSearch: '',
+    candidatesFilterStatus: [],
+    candidateModal: null,
   };
 
   // Se a página foi aberta a partir do link de recuperação de senha
@@ -132,6 +136,7 @@
       expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
       collapse: '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
       target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+      users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
       link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
@@ -257,6 +262,7 @@
       if (state.viewModal) $app.appendChild(buildViewModal());
       if (state.userModal) $app.appendChild(buildUserModal());
       if (state.leadModal) $app.appendChild(buildLeadModal());
+      if (state.candidateModal) $app.appendChild(buildCandidateModal());
     }
     // Estes dois pop-ups funcionam por cima de qualquer tela (mesmo
     // deslogado), já que o objetivo é justamente recuperar o acesso.
@@ -929,7 +935,8 @@
     const isDashboard = page && page.type === 'dashboard';
     const isUsers = page && page.type === 'users';
     const isLeads = page && page.type === 'leads';
-    const isSpecial = isSystems || isDashboard || isUsers || isLeads;
+    const isCandidates = page && page.type === 'candidates';
+    const isSpecial = isSystems || isDashboard || isUsers || isLeads || isCandidates;
 
     const header = el('div', { class: 'main-header' }, [
       el('div', { class: 'page-title-wrap' }, [
@@ -950,6 +957,11 @@
           class: 'btn btn-ghost btn-sm',
           onclick: () => copyLeadFormLink(),
         }, [el('span', { html: icon('link') }), ' Copiar link do formulário']),
+      ]) : (isCandidates ? el('div', { class: 'toolbox' }, [
+        el('button', {
+          class: 'btn btn-ghost btn-sm',
+          onclick: () => window.open('https://hello-inova.github.io/hello-inova-sdr-freelancer/', '_blank', 'noopener'),
+        }, [el('span', { html: icon('launch') }), ' Abrir formulário']),
       ]) : (isSpecial ? null : el('div', { class: 'toolbox' }, [
         toolboxBtn('type', 'Texto', () => addElement('label')),
         toolboxBtn('input', 'Campo', () => addElement('input')),
@@ -959,7 +971,7 @@
           el('button', { class: state.mode === 'edit' ? 'active' : '', onclick: () => { state.mode = 'edit'; render(); } }, ['Editar']),
           el('button', { class: state.mode === 'preview' ? 'active' : '', onclick: () => { state.mode = 'preview'; state.selectedElementId = null; render(); } }, ['Visualizar']),
         ]),
-      ])))),
+      ]))))),
     ]);
 
     main.appendChild(header);
@@ -981,6 +993,11 @@
 
     if (isLeads) {
       main.appendChild(buildLeadsManager());
+      return main;
+    }
+
+    if (isCandidates) {
+      main.appendChild(buildCandidatesManager());
       return main;
     }
 
@@ -1423,6 +1440,276 @@
     return el('div', {
       class: 'modal-overlay',
       onclick: (ev) => { if (ev.target === ev.currentTarget) closeLeadModal(); },
+    }, [card]);
+  }
+
+  // ---------------- Candidatos (módulo especial) ----------------
+  const CANDIDATE_STATUS_LABELS = {
+    novo: 'Novo',
+    em_analise: 'Em análise',
+    entrevista: 'Entrevista',
+    aprovado: 'Aprovado',
+    recusado: 'Recusado',
+  };
+  const CANDIDATE_STATUS_ORDER = ['novo', 'em_analise', 'entrevista', 'aprovado', 'recusado'];
+
+  function buildCandidatesManager() {
+    const wrap = el('div', { class: 'canvas-scroll' });
+    const inner = el('div', { class: 'sysmgr' });
+    const card = el('div', { class: 'sysmgr-card grow' });
+
+    card.appendChild(el('div', { class: 'sysmgr-header-row' }, [
+      el('div', { class: 'htext' }, [
+        el('h3', {}, [el('span', { html: icon('users') }), ' Candidatos a SDR']),
+        el('p', { class: 'sysmgr-sub' }, ['Candidaturas recebidas diretamente pelo formulário público.']),
+      ]),
+    ]));
+
+    const searchInput = el('input', {
+      type: 'search',
+      class: 'sysmgr-search-input',
+      placeholder: 'Pesquisar por nome, cidade, WhatsApp, e-mail ou Instagram…',
+      value: state.candidatesSearch || '',
+    });
+    searchInput.addEventListener('input', () => {
+      state.candidatesSearch = searchInput.value;
+      refreshGrid();
+    });
+    card.appendChild(el('div', { class: 'sysmgr-search' }, [
+      el('span', { class: 'search-icon', html: icon('search') }),
+      searchInput,
+    ]));
+
+    const filterBar = el('div', { class: 'sysmgr-filters' });
+    CANDIDATE_STATUS_ORDER.forEach((candidateStatus) => {
+      const active = state.candidatesFilterStatus.includes(candidateStatus);
+      const chip = el('button', {
+        type: 'button',
+        class: 'filter-chip' + (active ? ' active' : ''),
+      }, [CANDIDATE_STATUS_LABELS[candidateStatus]]);
+      chip.addEventListener('click', () => {
+        const idx = state.candidatesFilterStatus.indexOf(candidateStatus);
+        if (idx >= 0) state.candidatesFilterStatus.splice(idx, 1);
+        else state.candidatesFilterStatus.push(candidateStatus);
+        render();
+      });
+      filterBar.appendChild(chip);
+    });
+    if (state.candidatesFilterStatus.length) {
+      filterBar.appendChild(el('button', {
+        type: 'button',
+        class: 'filter-chip clear',
+        onclick: () => { state.candidatesFilterStatus = []; render(); },
+      }, ['Limpar filtros']));
+    }
+    card.appendChild(filterBar);
+
+    const gridBody = el('div', { class: 'candidate-grid-body' }, [
+      el('div', { class: 'dashboard-loading' }, ['Carregando candidatos…']),
+    ]);
+    const grid = el('div', { class: 'candidate-grid' }, [
+      el('div', { class: 'candidate-grid-header' }, [
+        el('div', {}, ['Candidato']),
+        el('div', {}, ['Contato']),
+        el('div', {}, ['Experiência']),
+        el('div', {}, ['Comissão']),
+        el('div', {}, ['Status']),
+        el('div', {}, ['Recebido em']),
+        el('div', { 'aria-label': 'Ações' }, ['']),
+      ]),
+      gridBody,
+    ]);
+    card.appendChild(el('div', { class: 'candidate-grid-scroll' }, [grid]));
+
+    function applyFilters() {
+      const term = (state.candidatesSearch || '').trim().toLowerCase();
+      const statuses = state.candidatesFilterStatus;
+      return (state.candidates || []).filter((candidate) => {
+        if (term) {
+          const haystack = [
+            candidate.name,
+            candidate.location,
+            candidate.whatsapp,
+            candidate.email,
+            candidate.instagram_url,
+          ].filter(Boolean).join(' ').toLowerCase();
+          if (!haystack.includes(term)) return false;
+        }
+        return !statuses.length || statuses.includes(candidate.status);
+      });
+    }
+
+    function refreshGrid() {
+      gridBody.innerHTML = '';
+      const all = state.candidates || [];
+      const filtered = applyFilters();
+      if (!all.length) {
+        gridBody.appendChild(el('div', { class: 'candidate-grid-empty' }, [
+          'Nenhuma candidatura recebida ainda. As novas inscrições aparecerão aqui automaticamente.',
+        ]));
+      } else if (!filtered.length) {
+        gridBody.appendChild(el('div', { class: 'candidate-grid-empty' }, [
+          'Nenhum candidato encontrado com a pesquisa ou os filtros atuais.',
+        ]));
+      } else {
+        filtered.forEach((candidate) => gridBody.appendChild(buildCandidateRow(candidate)));
+      }
+    }
+
+    api('/candidates')
+      .then(({ candidates }) => {
+        state.candidates = candidates;
+        refreshGrid();
+      })
+      .catch((err) => {
+        gridBody.innerHTML = '';
+        gridBody.appendChild(el('div', { class: 'dashboard-error' }, [
+          'Não foi possível carregar os candidatos: ' + err.message,
+        ]));
+      });
+
+    inner.appendChild(card);
+    wrap.appendChild(inner);
+    return wrap;
+  }
+
+  function formatCommission(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '—';
+    return number.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '%';
+  }
+
+  function buildCandidateRow(candidate) {
+    const statusBadge = el('span', {
+      class: 'candidate-status-badge status-' + candidate.status,
+    }, [CANDIDATE_STATUS_LABELS[candidate.status] || candidate.status]);
+
+    const viewBtn = el('button', {
+      class: 'btn btn-primary btn-sm btn-icon',
+      title: 'Visualizar candidato',
+      type: 'button',
+      onclick: () => openCandidateModal(candidate),
+      html: icon('eye'),
+    });
+
+    return el('div', { class: 'candidate-grid-row' }, [
+      el('div', { class: 'candidate-cell candidate-primary', 'data-label': 'Candidato' }, [
+        el('div', { class: 'candidate-avatar' }, [(candidate.name || '?').trim().charAt(0).toUpperCase()]),
+        el('div', {}, [
+          el('strong', {}, [candidate.name]),
+          el('span', {}, [candidate.location]),
+        ]),
+      ]),
+      el('div', { class: 'candidate-cell candidate-contact', 'data-label': 'Contato' }, [
+        el('strong', {}, [candidate.whatsapp]),
+        el('span', {}, [candidate.email]),
+      ]),
+      el('div', { class: 'candidate-cell', 'data-label': 'Experiência' }, [candidate.prospecting_experience]),
+      el('div', { class: 'candidate-cell candidate-commission', 'data-label': 'Comissão' }, [formatCommission(candidate.desired_commission)]),
+      el('div', { class: 'candidate-cell', 'data-label': 'Status' }, [statusBadge]),
+      el('div', { class: 'candidate-cell', 'data-label': 'Recebido em' }, [formatDateBR(candidate.created_at)]),
+      el('div', { class: 'candidate-cell candidate-actions' }, [viewBtn]),
+    ]);
+  }
+
+  function openCandidateModal(candidate) {
+    state.candidateModal = { candidate };
+    render();
+  }
+
+  function closeCandidateModal() {
+    state.candidateModal = null;
+    render();
+  }
+
+  async function updateCandidateStatus(candidate, newStatus) {
+    try {
+      const { candidate: updated } = await api('/candidates/' + candidate.id, {
+        method: 'PUT',
+        body: { status: newStatus },
+      });
+      state.candidates = (state.candidates || []).map((item) => item.id === updated.id ? updated : item);
+      if (state.candidateModal && state.candidateModal.candidate.id === updated.id) {
+        state.candidateModal.candidate = updated;
+      }
+      render();
+      toast('Status do candidato atualizado.');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function deleteCandidate(candidate) {
+    if (!window.confirm('Excluir a candidatura de "' + candidate.name + '"? Essa ação não pode ser desfeita.')) return;
+    try {
+      await api('/candidates/' + candidate.id, { method: 'DELETE' });
+      state.candidates = (state.candidates || []).filter((item) => item.id !== candidate.id);
+      closeCandidateModal();
+      toast('Candidatura excluída.');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  function buildCandidateModal() {
+    const candidate = state.candidateModal.candidate;
+    const statusSelect = el('select', {}, CANDIDATE_STATUS_ORDER.map((candidateStatus) =>
+      el('option', {
+        value: candidateStatus,
+        selected: candidateStatus === candidate.status ? 'selected' : null,
+      }, [CANDIDATE_STATUS_LABELS[candidateStatus]])
+    ));
+    statusSelect.addEventListener('change', () => updateCandidateStatus(candidate, statusSelect.value));
+
+    const instagramLink = el('a', {
+      class: 'view-modal-url',
+      href: normalizedUrl(candidate.instagram_url),
+      target: '_blank',
+      rel: 'noopener',
+    }, [candidate.instagram_url]);
+
+    const details = el('div', { class: 'view-modal-grid' }, [
+      viewField('Nome completo', candidate.name),
+      viewFieldWhatsApp('WhatsApp', candidate.whatsapp),
+      viewField('E-mail', candidate.email),
+      viewField('Cidade / Estado', candidate.location),
+      el('div', { class: 'view-field' }, [el('label', {}, ['Instagram']), instagramLink]),
+      viewField('Experiência com prospecção', candidate.prospecting_experience),
+      viewField('Comissão desejada', formatCommission(candidate.desired_commission)),
+      viewField('Recebido em', formatDateBR(candidate.created_at)),
+    ]);
+
+    const body = el('div', { class: 'modal-body view-modal-body' }, [
+      details,
+      el('div', { class: 'field-full' }, [
+        el('div', { class: 'field-section-title' }, ['Motivação']),
+        el('p', { class: 'view-description' }, [candidate.motivation]),
+      ]),
+      el('div', { class: 'field', style: 'margin-top:18px;max-width:240px;' }, [
+        el('label', {}, ['Status']),
+        statusSelect,
+      ]),
+    ]);
+
+    const card = el('div', { class: 'modal-card view-modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Candidato: ' + candidate.name]),
+        el('div', { class: 'modal-header-actions' }, [
+          el('button', {
+            class: 'btn btn-danger btn-icon',
+            title: 'Excluir candidatura',
+            onclick: () => deleteCandidate(candidate),
+            html: icon('trash'),
+          }),
+          el('button', { class: 'btn btn-ghost btn-icon', onclick: closeCandidateModal, html: icon('close') }),
+        ]),
+      ]),
+      body,
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (event) => { if (event.target === event.currentTarget) closeCandidateModal(); },
     }, [card]);
   }
 

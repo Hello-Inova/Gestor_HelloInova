@@ -11,6 +11,7 @@ const pageRoutes = require('./routes/pages');
 const systemRoutes = require('./routes/systems');
 const dashboardRoutes = require('./routes/dashboard');
 const leadRoutes = require('./routes/leads');
+const candidateRoutes = require('./routes/candidates');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +40,7 @@ app.use('/api/pages', pageRoutes);
 app.use('/api/systems', systemRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/candidates', candidateRoutes);
 
 // Frontend estático — precisa estar em public/** na raiz do projeto (a
 // Vercel serve esse diretório direto pela CDN e ignora express.static() nas
