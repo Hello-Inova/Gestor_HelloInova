@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js';
+import * as THREE from '/vendor/three/three.module.js';
 
 const canvas = document.getElementById('premium-scene');
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
