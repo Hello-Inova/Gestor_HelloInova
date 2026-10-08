@@ -12,7 +12,24 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; color: var(--text); background: radial-gradient(circle at 80% 0, rgba(47,123,255,.2), transparent 32rem), var(--bg); }
 .public-header { padding: 34px max(24px, calc((100vw - 1180px)/2)); border-bottom: 1px solid var(--border); }
-.public-brand img { width: 150px; height: 42px; object-fit: contain; object-position: left center; }
+.public-brand {
+  position: relative;
+  display: block;
+  width: 230px;
+  height: 66px;
+  overflow: hidden;
+}
+/* O arquivo original é quadrado e tem margens internas grandes. Este
+   enquadramento mostra somente a marca, em vez de reduzir a arte inteira. */
+.public-brand img {
+  position: absolute;
+  width: 320px;
+  max-width: none;
+  height: 320px;
+  left: -48px;
+  top: -132px;
+  object-fit: contain;
+}
 .public-hero { max-width: 760px; padding: 72px 0 36px; }
 .eyebrow { color: var(--blue-light); text-transform: uppercase; letter-spacing: 2px; font-size: 12px; font-weight: 700; }
 .public-hero h1 { margin: 14px 0; font: 800 clamp(34px, 6vw, 62px)/1.08 Poppins, sans-serif; letter-spacing: -2px; }
@@ -31,8 +48,28 @@ body { margin: 0; min-height: 100vh; color: var(--text); background: radial-grad
 .site-card { display: flex; flex-direction: column; min-height: 390px; overflow: hidden; background: linear-gradient(180deg, #111522, #0b0e16); border: 1px solid var(--border); border-radius: 18px; transition: transform .2s, border-color .2s; }
 .site-card:hover { transform: translateY(-4px); border-color: rgba(96,140,255,.45); }
 .site-visual { height: 180px; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(47,123,255,.2), transparent 70%), #070910; border-bottom: 1px solid var(--border); }
-.site-visual img { width: auto; height: auto; max-width: min(72%, 240px); max-height: 120px; object-fit: contain; }
-.site-fallback { font: 800 54px Poppins, sans-serif; color: var(--blue-light); }
+.site-visual img {
+  width: 120px;
+  height: 120px;
+  padding: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(96,140,255,.35);
+  background: #0b1020;
+  box-shadow: 0 12px 30px rgba(0,0,0,.32);
+  object-fit: contain;
+}
+.site-fallback {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(96,140,255,.35);
+  background: #0b1020;
+  font: 800 54px Poppins, sans-serif;
+  color: var(--blue-light);
+}
 .site-content { display: flex; flex: 1; flex-direction: column; padding: 22px; }
 .site-niche { color: var(--blue-light); font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
 .site-content h2 { margin: 6px 0 10px; font: 700 20px Poppins, sans-serif; }
@@ -45,7 +82,8 @@ body { margin: 0; min-height: 100vh; color: var(--text); background: radial-grad
 .public-footer { padding: 26px 20px; color: var(--muted); border-top: 1px solid var(--border); text-align: center; font-size: 12px; }
 @media (max-width: 640px) {
   .public-header { padding: 22px 20px; }
-  .public-brand img { width: 132px; height: 36px; }
+  .public-brand { width: 202px; height: 58px; }
+  .public-brand img { width: 282px; height: 282px; left: -43px; top: -117px; }
   .public-hero { padding: 42px 0 18px; }
   .public-hero h1 { font-size: clamp(30px, 10vw, 42px); letter-spacing: -1px; }
   .public-hero p { font-size: 15px; }
@@ -70,8 +108,8 @@ body { margin: 0; min-height: 100vh; color: var(--text); background: radial-grad
   }
   .site-card:hover { transform: none; }
   .site-visual { height: 100%; min-height: 210px; border-bottom: 0; border-right: 1px solid var(--border); }
-  .site-visual img { max-width: 88px; max-height: 88px; }
-  .site-fallback { font-size: 38px; }
+  .site-visual img { width: 82px; height: 82px; padding: 7px; }
+  .site-fallback { width: 82px; height: 82px; font-size: 38px; }
   .site-content { min-width: 0; padding: 15px 14px; }
   .site-content h2 { margin: 4px 0 7px; font-size: 16px; line-height: 1.25; }
   .site-description { margin-bottom: 10px; font-size: 12px; line-height: 1.45; -webkit-line-clamp: 2; }
