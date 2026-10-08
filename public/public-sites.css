@@ -30,8 +30,8 @@ body { margin: 0; min-height: 100vh; color: var(--text); background: radial-grad
 .public-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
 .site-card { display: flex; flex-direction: column; min-height: 390px; overflow: hidden; background: linear-gradient(180deg, #111522, #0b0e16); border: 1px solid var(--border); border-radius: 18px; transition: transform .2s, border-color .2s; }
 .site-card:hover { transform: translateY(-4px); border-color: rgba(96,140,255,.45); }
-.site-visual { height: 170px; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(47,123,255,.2), transparent 70%), #070910; border-bottom: 1px solid var(--border); }
-.site-visual img { width: 100%; height: 100%; object-fit: contain; padding: 24px; }
+.site-visual { height: 180px; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(47,123,255,.2), transparent 70%), #070910; border-bottom: 1px solid var(--border); }
+.site-visual img { width: auto; height: auto; max-width: min(72%, 240px); max-height: 120px; object-fit: contain; }
 .site-fallback { font: 800 54px Poppins, sans-serif; color: var(--blue-light); }
 .site-content { display: flex; flex: 1; flex-direction: column; padding: 22px; }
 .site-niche { color: var(--blue-light); font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
@@ -43,4 +43,38 @@ body { margin: 0; min-height: 100vh; color: var(--text); background: radial-grad
 .public-state { grid-column: 1/-1; padding: 64px 20px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: 18px; }
 .public-state.error { color: #ff9eaf; }
 .public-footer { padding: 26px 20px; color: var(--muted); border-top: 1px solid var(--border); text-align: center; font-size: 12px; }
-@media (max-width: 640px) { .public-header { padding: 24px 20px; } .public-hero { padding: 50px 0 22px; } .public-hero h1 { letter-spacing: -1px; } .public-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .public-header { padding: 22px 20px; }
+  .public-brand img { width: 132px; height: 36px; }
+  .public-hero { padding: 42px 0 18px; }
+  .public-hero h1 { font-size: clamp(30px, 10vw, 42px); letter-spacing: -1px; }
+  .public-hero p { font-size: 15px; }
+  .public-main { width: 100%; padding: 28px 20px 54px; overflow: hidden; }
+  .public-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 -20px;
+    padding: 2px 20px 8px;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .public-filters::-webkit-scrollbar { display: none; }
+  .public-filters button { flex: 0 0 auto; scroll-snap-align: start; }
+  .public-count { margin-top: 18px; }
+  .public-grid { grid-template-columns: 1fr; gap: 14px; }
+  .site-card {
+    display: grid;
+    grid-template-columns: 108px minmax(0, 1fr);
+    min-height: 0;
+    border-radius: 14px;
+  }
+  .site-card:hover { transform: none; }
+  .site-visual { height: 100%; min-height: 210px; border-bottom: 0; border-right: 1px solid var(--border); }
+  .site-visual img { max-width: 88px; max-height: 88px; }
+  .site-fallback { font-size: 38px; }
+  .site-content { min-width: 0; padding: 15px 14px; }
+  .site-content h2 { margin: 4px 0 7px; font-size: 16px; line-height: 1.25; }
+  .site-description { margin-bottom: 10px; font-size: 12px; line-height: 1.45; -webkit-line-clamp: 2; }
+  .site-badges { margin-bottom: 12px; flex-wrap: nowrap; overflow: hidden; }
+  .site-link { width: 100%; padding: 9px 10px; text-align: center; font-size: 12px; }
+}

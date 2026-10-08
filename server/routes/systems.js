@@ -285,6 +285,42 @@ router.post('/options/:kind', ah(async (req, res) => {
   res.status(201).json({ option: inserted.rows[0] });
 }));
 
+router.delete('/options/:kind/:name', ah(async (req, res) => {
+  const kind = req.params.kind === 'categories' ? 'category' : req.params.kind === 'niches' ? 'niche' : '';
+  const name = String(req.params.name || '').trim();
+  if (!kind || !name) return res.status(404).json({ error: 'Opção não encontrada.' });
+
+  const option = await db.get(
+    'SELECT id, name FROM system_taxonomies WHERE account_id = ? AND kind = ? AND lower(name) = lower(?)',
+    req.user.account_id,
+    kind,
+    name
+  );
+  if (!option) return res.status(404).json({ error: 'Opção não encontrada.' });
+
+  if (kind === 'category') {
+    const systems = await db.all('SELECT id, categories FROM systems WHERE user_id = ?', req.user.account_id);
+    for (const system of systems) {
+      let categories = [];
+      try {
+        const parsed = JSON.parse(system.categories || '[]');
+        if (Array.isArray(parsed)) categories = parsed.filter((item) => item !== option.name);
+      } catch (err) { /* valor antigo inválido: normaliza para uma lista vazia */ }
+      await db.run('UPDATE systems SET categories = ?, updated_at = NOW() WHERE id = ?', JSON.stringify(categories), system.id);
+    }
+  } else {
+    await db.run(
+      'UPDATE systems SET niche = ?, updated_at = NOW() WHERE user_id = ? AND niche = ?',
+      '',
+      req.user.account_id,
+      option.name
+    );
+  }
+
+  await db.run('DELETE FROM system_taxonomies WHERE id = ?', option.id);
+  res.json({ ok: true, name: option.name, kind });
+}));
+
 // Lista sistemas cadastrados (sem a senha em texto puro)
 router.get(
   '/',

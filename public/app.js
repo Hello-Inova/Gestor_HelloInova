@@ -249,7 +249,7 @@
   }
 
   function systemCategories() {
-    return state.systemOptions.categories && state.systemOptions.categories.length
+    return Array.isArray(state.systemOptions.categories)
       ? state.systemOptions.categories
       : DEFAULT_SYSTEM_CATEGORIES;
   }
@@ -270,6 +270,30 @@
         render();
       }
       toast((kind === 'categories' ? 'Filtro' : 'Nicho') + ' cadastrado.');
+    } catch (err) { toast(err.message, true); }
+  }
+
+  async function deleteSystemOption(kind, name) {
+    const label = kind === 'categories' ? 'filtro' : 'nicho';
+    if (!confirm('Excluir o ' + label + ' "' + name + '"? Ele também será removido dos sistemas cadastrados.')) return;
+    try {
+      await api('/systems/options/' + kind + '/' + encodeURIComponent(name), { method: 'DELETE' });
+      const listKey = kind === 'categories' ? 'categories' : 'niches';
+      state.systemOptions[listKey] = (state.systemOptions[listKey] || []).filter((item) => item !== name);
+      if (kind === 'categories') {
+        state.systemsFilterCategories = state.systemsFilterCategories.filter((item) => item !== name);
+        state.systems = (state.systems || []).map((system) => ({
+          ...system,
+          categories: (system.categories || []).filter((item) => item !== name),
+        }));
+      } else {
+        if (state.publicSitesNiche === name) state.publicSitesNiche = '';
+        state.systems = (state.systems || []).map((system) =>
+          system.niche === name ? { ...system, niche: '' } : system
+        );
+      }
+      render();
+      toast((kind === 'categories' ? 'Filtro' : 'Nicho') + ' excluído.');
     } catch (err) { toast(err.message, true); }
   }
 
@@ -1935,7 +1959,12 @@
         else state.systemsFilterCategories.push(cat);
         render();
       });
-      filterBar.appendChild(chip);
+      const removeBtn = el('button', {
+        type: 'button', class: 'filter-chip-delete', title: 'Excluir filtro ' + cat,
+        'aria-label': 'Excluir filtro ' + cat,
+        onclick: (ev) => { ev.stopPropagation(); deleteSystemOption('categories', cat); },
+      }, ['×']);
+      filterBar.appendChild(el('div', { class: 'filter-chip-wrap' }, [chip, removeBtn]));
     });
     filterBar.appendChild(el('button', {
       type: 'button', class: 'filter-chip add', onclick: () => createSystemOption('categories'),

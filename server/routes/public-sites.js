@@ -16,9 +16,19 @@ function parseCategories(value) {
 router.get(
   '/:slug',
   ah(async (req, res) => {
+    const slug = String(req.params.slug || '');
+    if (!/^[a-f0-9]{32}$/.test(slug)) {
+      return res.status(404).json({ error: 'Página pública não encontrada.' });
+    }
+    res.set({
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+    });
     const account = await db.get(
       'SELECT id, name FROM users WHERE public_slug = ? AND id = account_id',
-      String(req.params.slug || '')
+      slug
     );
     if (!account) return res.status(404).json({ error: 'Página pública não encontrada.' });
 
