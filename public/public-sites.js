@@ -5,6 +5,9 @@
   const search = document.getElementById('public-search');
   const filters = document.getElementById('public-niches');
   const count = document.getElementById('public-count');
+  const sidebar = document.getElementById('public-sidebar');
+  const menuToggle = document.getElementById('public-menu-toggle');
+  const menuOverlay = document.getElementById('public-menu-overlay');
   const slug = location.pathname.split('/').filter(Boolean).pop();
   let systems = [];
   let activeNiche = '';
@@ -18,6 +21,33 @@
         });
       }, { threshold: 0.12 })
     : null;
+
+  function setMenu(open) {
+    sidebar.classList.toggle('open', open);
+    menuToggle.classList.toggle('open', open);
+    menuOverlay.classList.toggle('open', open);
+    document.body.classList.toggle('menu-open', open);
+    menuToggle.setAttribute('aria-expanded', String(open));
+    menuToggle.setAttribute('aria-label', open ? 'Fechar menu' : 'Abrir menu');
+  }
+
+  menuToggle.addEventListener('click', () => setMenu(!sidebar.classList.contains('open')));
+  menuOverlay.addEventListener('click', () => setMenu(false));
+  sidebar.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => setMenu(false)));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setMenu(false);
+  });
+
+  const sections = ['inicio', 'projetos'].map((id) => document.getElementById(id));
+  const navLinks = [...document.querySelectorAll('.public-nav a')];
+  if ('IntersectionObserver' in window) {
+    const sectionObserver = new IntersectionObserver((entries) => {
+      const current = entries.find((entry) => entry.isIntersecting);
+      if (!current) return;
+      navLinks.forEach((link) => link.classList.toggle('active', link.hash === '#' + current.target.id));
+    }, { rootMargin: '-35% 0px -55%', threshold: 0 });
+    sections.forEach((section) => sectionObserver.observe(section));
+  }
 
   function normalizedUrl(value) {
     const url = String(value || '').trim();
