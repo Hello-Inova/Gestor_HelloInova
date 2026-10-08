@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "node --no-warnings server/index.js",
-    "dev": "node --no-warnings --watch server/index.js"
+    "dev": "node --no-warnings --watch server/index.js",
+    "build:webgl": "esbuild scripts/public-sites-3d.entry.js --bundle --format=iife --minify --outfile=public/public-sites-3d.js"
   },
   "engines": {
     "node": ">=22.5.0"
@@ -18,5 +19,8 @@
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.23.0",
     "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.11"
   }
 }
