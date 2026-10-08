@@ -8,6 +8,16 @@
   const slug = location.pathname.split('/').filter(Boolean).pop();
   let systems = [];
   let activeNiche = '';
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cardObserver = !reduceMotion && 'IntersectionObserver' in window
+    ? new IntersectionObserver((entries, observer) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        });
+      }, { threshold: 0.12 })
+    : null;
 
   function normalizedUrl(value) {
     const url = String(value || '').trim();
@@ -61,7 +71,12 @@
       grid.appendChild(node('div', 'public-state', systems.length ? 'Nenhum projeto corresponde à pesquisa.' : 'Novos projetos serão publicados aqui em breve.'));
       return;
     }
-    visible.forEach((system) => grid.appendChild(card(system)));
+    visible.forEach((system) => {
+      const item = card(system);
+      grid.appendChild(item);
+      if (cardObserver) cardObserver.observe(item);
+      else item.classList.add('is-visible');
+    });
   }
 
   function renderFilters(niches) {
