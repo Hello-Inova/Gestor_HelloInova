@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sites e sistemas | Hello Inova</title>
+  <link rel="icon" type="image/png" href="/assets/logo-mark.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/public-sites.css" />
+</head>
+<body>
+  <header class="public-header">
+    <a class="public-brand" href="https://helloinova.com.br" target="_blank" rel="noopener">
+      <img src="/assets/logo-wordmark.png" alt="Hello Inova" />
+    </a>
+    <div class="public-hero">
+      <span class="eyebrow">Da mente às telas</span>
+      <h1>Sites e sistemas que transformam ideias em experiências.</h1>
+      <p>Explore projetos publicados pela Hello Inova.</p>
+    </div>
+  </header>
+  <main class="public-main">
+    <section class="public-controls" aria-label="Pesquisa e filtros">
+      <label class="public-search">
+        <span aria-hidden="true">⌕</span>
+        <input id="public-search" type="search" placeholder="Pesquisar por nome, nicho ou recurso…" autocomplete="off" />
+      </label>
+      <div id="public-niches" class="public-filters"></div>
+    </section>
+    <p id="public-count" class="public-count"></p>
+    <section id="public-grid" class="public-grid" aria-live="polite">
+      <div class="public-state">Carregando projetos…</div>
+    </section>
+  </main>
+  <footer class="public-footer">Hello Inova · Tecnologia que aproxima ideias e pessoas.</footer>
+  <script src="/public-sites.js"></script>
+</body>
+</html>

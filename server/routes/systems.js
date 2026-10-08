@@ -25,7 +25,7 @@ function toPublic(row) {
   let categories = [];
   try {
     const parsed = JSON.parse(row.categories || '[]');
-    if (Array.isArray(parsed)) categories = parsed.filter((c) => SYSTEM_CATEGORIES.includes(c));
+    if (Array.isArray(parsed)) categories = parsed.filter((c) => typeof c === 'string');
   } catch (e) { /* categorias inválidas — trata como vazio */ }
 
   let subscriptions = [];
@@ -81,6 +81,9 @@ function toPublic(row) {
     contract_file_name: row.contract_file_name || '',
     documentation_files: documentationFiles,
     links,
+    specifications: row.specifications || '',
+    is_public: !!row.is_public,
+    niche: row.niche || '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -149,14 +152,42 @@ function parseLinks(input) {
 
 // Normaliza e valida a lista de categorias vinda do cliente.
 // Retorna { ok, categories, error }.
-function parseCategories(input) {
+async function ensureTaxonomies(accountId) {
+  for (const name of SYSTEM_CATEGORIES) {
+    await db.run(
+      `INSERT INTO system_taxonomies (account_id, kind, name)
+       VALUES (?, 'category', ?) ON CONFLICT (account_id, kind, name) DO NOTHING`,
+      accountId,
+      name
+    );
+  }
+}
+
+async function parseCategories(input, accountId) {
   if (input === undefined) return { ok: true, categories: undefined };
   if (!Array.isArray(input)) return { ok: false, error: 'Categorias inválidas.' };
-  const unique = [...new Set(input)];
-  if (!unique.every((c) => typeof c === 'string' && SYSTEM_CATEGORIES.includes(c))) {
+  const unique = [...new Set(input.map((item) => typeof item === 'string' ? item.trim() : item).filter(Boolean))];
+  const allowed = await db.all(
+    "SELECT name FROM system_taxonomies WHERE account_id = ? AND kind = 'category'",
+    accountId
+  );
+  const allowedNames = new Set(allowed.map((item) => item.name));
+  if (!unique.every((c) => typeof c === 'string' && allowedNames.has(c))) {
     return { ok: false, error: 'Selecione apenas opções válidas de tipo de sistema.' };
   }
   return { ok: true, categories: unique };
+}
+
+async function parseNiche(input, accountId) {
+  if (input === undefined) return { ok: true, niche: undefined };
+  const niche = typeof input === 'string' ? input.trim() : '';
+  if (!niche) return { ok: true, niche: '' };
+  const found = await db.get(
+    "SELECT id FROM system_taxonomies WHERE account_id = ? AND kind = 'niche' AND name = ?",
+    accountId,
+    niche
+  );
+  return found ? { ok: true, niche } : { ok: false, error: 'Selecione um nicho válido.' };
 }
 
 // Normaliza e valida a lista de assinaturas vinda do cliente.
@@ -210,9 +241,49 @@ function parseContact(contact_name, contact_whatsapp, contact_email) {
 }
 
 // Lista as categorias/tipos de sistema disponíveis para o select do cadastro
-router.get('/categories', (req, res) => {
-  res.json({ categories: SYSTEM_CATEGORIES });
-});
+router.get('/options', ah(async (req, res) => {
+  await ensureTaxonomies(req.user.account_id);
+  const rows = await db.all(
+    'SELECT kind, name FROM system_taxonomies WHERE account_id = ? ORDER BY kind, lower(name)',
+    req.user.account_id
+  );
+  const owner = await db.get('SELECT public_slug FROM users WHERE id = ?', req.user.account_id);
+  res.json({
+    categories: rows.filter((item) => item.kind === 'category').map((item) => item.name),
+    niches: rows.filter((item) => item.kind === 'niche').map((item) => item.name),
+    public_url: `${req.protocol}://${req.get('host')}/sites-publicos/${owner.public_slug}`,
+  });
+}));
+
+router.get('/categories', ah(async (req, res) => {
+  await ensureTaxonomies(req.user.account_id);
+  const rows = await db.all(
+    "SELECT name FROM system_taxonomies WHERE account_id = ? AND kind = 'category' ORDER BY lower(name)",
+    req.user.account_id
+  );
+  res.json({ categories: rows.map((item) => item.name) });
+}));
+
+router.post('/options/:kind', ah(async (req, res) => {
+  const kind = req.params.kind === 'categories' ? 'category' : req.params.kind === 'niches' ? 'niche' : '';
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim().replace(/\s+/g, ' ') : '';
+  if (!kind) return res.status(404).json({ error: 'Tipo de opção inválido.' });
+  if (!name || name.length > 60) return res.status(400).json({ error: 'Informe um nome de até 60 caracteres.' });
+  const duplicate = await db.get(
+    'SELECT id FROM system_taxonomies WHERE account_id = ? AND kind = ? AND lower(name) = lower(?)',
+    req.user.account_id,
+    kind,
+    name
+  );
+  if (duplicate) return res.status(409).json({ error: 'Essa opção já existe.' });
+  const inserted = await db.run(
+    'INSERT INTO system_taxonomies (account_id, kind, name) VALUES (?, ?, ?) RETURNING id, name',
+    req.user.account_id,
+    kind,
+    name
+  );
+  res.status(201).json({ option: inserted.rows[0] });
+}));
 
 // Lista sistemas cadastrados (sem a senha em texto puro)
 router.get(
@@ -232,7 +303,7 @@ router.post(
       categories, subscriptions,
       contact_name = '', contact_whatsapp = '', contact_email = '',
       contract_file = '', contract_file_name = '',
-      documentation_files, links,
+      documentation_files, links, specifications = '', is_public = false, niche = '',
     } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
     if (!url || !url.trim()) return res.status(400).json({ error: 'Informe o link de acesso.' });
@@ -241,8 +312,11 @@ router.post(
       return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
     }
 
-    const cat = parseCategories(categories);
+    await ensureTaxonomies(req.user.account_id);
+    const cat = await parseCategories(categories, req.user.account_id);
     if (!cat.ok) return res.status(400).json({ error: cat.error });
+    const nicheResult = await parseNiche(niche, req.user.account_id);
+    if (!nicheResult.ok) return res.status(400).json({ error: nicheResult.error });
     const subs = parseSubscriptions(subscriptions);
     if (!subs.ok) return res.status(400).json({ error: subs.error });
     const contact = parseContact(contact_name, contact_whatsapp, contact_email);
@@ -255,14 +329,16 @@ router.post(
     const inserted = await db.run(
       `INSERT INTO systems
         (user_id, name, url, repo_url, login_email, login_password_enc, logo, categories, subscriptions,
-         contact_name, contact_whatsapp, contact_email, contract_file, contract_file_name, documentation_files, links)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         contact_name, contact_whatsapp, contact_email, contract_file, contract_file_name, documentation_files, links,
+         specifications, is_public, niche)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        RETURNING *`,
       req.user.account_id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
       JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || []),
       contact.contact_name, contact.contact_whatsapp, contact.contact_email,
       contract_file || '', (contract_file_name || '').trim().slice(0, 200),
-      JSON.stringify(docs.files || []), JSON.stringify(linksResult.links || [])
+      JSON.stringify(docs.files || []), JSON.stringify(linksResult.links || []),
+      String(specifications || '').trim().slice(0, 5000), is_public ? 1 : 0, nicheResult.niche || ''
     );
 
     res.status(201).json({ system: toPublic(inserted.rows[0]) });
@@ -281,7 +357,7 @@ router.put(
       categories, subscriptions,
       contact_name, contact_whatsapp, contact_email,
       contract_file, contract_file_name,
-      documentation_files, links,
+      documentation_files, links, specifications, is_public, niche,
     } = req.body || {};
     if (logo !== undefined && !validLogo(logo)) {
       return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
@@ -289,8 +365,11 @@ router.put(
     if (contract_file !== undefined && !validContractFile(contract_file)) {
       return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
     }
-    const cat = parseCategories(categories);
+    await ensureTaxonomies(req.user.account_id);
+    const cat = await parseCategories(categories, req.user.account_id);
     if (!cat.ok) return res.status(400).json({ error: cat.error });
+    const nicheResult = await parseNiche(niche, req.user.account_id);
+    if (!nicheResult.ok) return res.status(400).json({ error: nicheResult.error });
     const subs = parseSubscriptions(subscriptions);
     if (!subs.ok) return res.status(400).json({ error: subs.error });
     const contact = parseContact(
@@ -318,16 +397,20 @@ router.put(
       typeof contract_file_name === 'string' ? contract_file_name.trim().slice(0, 200) : row.contract_file_name;
     const newDocumentationFiles = docs.files === undefined ? row.documentation_files : JSON.stringify(docs.files);
     const newLinks = linksResult.links === undefined ? row.links : JSON.stringify(linksResult.links);
+    const newSpecifications = typeof specifications === 'string' ? specifications.trim().slice(0, 5000) : row.specifications;
+    const newIsPublic = typeof is_public === 'boolean' ? (is_public ? 1 : 0) : row.is_public;
+    const newNiche = nicheResult.niche === undefined ? row.niche : nicheResult.niche;
 
     const updated = await db.run(
       `UPDATE systems SET name=?, url=?, repo_url=?, login_email=?, login_password_enc=?, logo=?,
          categories=?, subscriptions=?, contact_name=?, contact_whatsapp=?, contact_email=?,
-         contract_file=?, contract_file_name=?, documentation_files=?, links=?,
+         contract_file=?, contract_file_name=?, documentation_files=?, links=?, specifications=?, is_public=?, niche=?,
          updated_at=NOW() WHERE id=?
        RETURNING *`,
       newName, newUrl, newRepoUrl, newEmail, newPassEnc, newLogo, newCategories, newSubscriptions,
       contact.contact_name, contact.contact_whatsapp, contact.contact_email,
-      newContractFile, newContractFileName, newDocumentationFiles, newLinks, row.id
+      newContractFile, newContractFileName, newDocumentationFiles, newLinks,
+      newSpecifications, newIsPublic, newNiche, row.id
     );
 
     res.json({ system: toPublic(updated.rows[0]) });

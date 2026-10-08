@@ -172,7 +172,11 @@ router.post(
     );
     const userId = inserted.rows[0].id;
     // Conta nova e independente: é dona de si mesma.
-    await db.run('UPDATE users SET account_id = ? WHERE id = ?', userId, userId);
+    await db.run(
+      "UPDATE users SET account_id = ?, public_slug = md5(random()::text || clock_timestamp()::text || id::text) WHERE id = ?",
+      userId,
+      userId
+    );
 
     // Cria os módulos iniciais fixos da conta: Gestor de Sistemas, Dashboard
     // e Cadastro de Usuário.
@@ -212,7 +216,14 @@ router.post(
       4
     );
     await db.run(
-      'UPDATE users SET systems_seeded = 1, dashboard_seeded = 1, leads_seeded = 1, candidates_seeded = 1 WHERE id = ?',
+      'INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)',
+      userId,
+      'Sites públicos',
+      'public_sites',
+      5
+    );
+    await db.run(
+      'UPDATE users SET systems_seeded = 1, dashboard_seeded = 1, leads_seeded = 1, candidates_seeded = 1, public_sites_seeded = 1 WHERE id = ?',
       userId
     );
 

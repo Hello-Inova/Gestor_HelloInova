@@ -24,6 +24,9 @@
     viewModal: null, // sistema sendo visualizado no pop-up de detalhes
     systemsSearch: '',
     systemsFilterCategories: [],
+    systemOptions: { categories: [], niches: [], public_url: '' },
+    publicSitesSearch: '',
+    publicSitesNiche: '',
     users: null, // lista de usuários da conta (módulo "Cadastro de Usuário")
     userModal: false,
     forgotPasswordOpen: false, // pop-up "esqueci minha senha" (pede o e-mail)
@@ -50,7 +53,7 @@
     }
   }
 
-  const SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
+  const DEFAULT_SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
 
   // ---------------- API helper ----------------
   async function api(path, opts) {
@@ -138,6 +141,7 @@
       target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
       users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
       link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+      globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
   }
@@ -210,7 +214,7 @@
     try {
       const { user } = await api('/auth/me');
       state.user = user;
-      await Promise.all([loadPages(), loadSystems()]);
+      await Promise.all([loadPages(), loadSystems(), loadSystemOptions()]);
     } catch (e) {
       state.user = null;
     }
@@ -234,6 +238,61 @@
     } catch (err) {
       state.systems = state.systems || [];
     }
+  }
+
+  async function loadSystemOptions() {
+    try {
+      state.systemOptions = await api('/systems/options');
+    } catch (err) {
+      state.systemOptions = { categories: DEFAULT_SYSTEM_CATEGORIES.slice(), niches: [], public_url: '' };
+    }
+  }
+
+  function systemCategories() {
+    return state.systemOptions.categories && state.systemOptions.categories.length
+      ? state.systemOptions.categories
+      : DEFAULT_SYSTEM_CATEGORIES;
+  }
+
+  async function createSystemOption(kind, selectEl) {
+    const label = kind === 'categories' ? 'filtro' : 'nicho';
+    const name = prompt('Nome do novo ' + label + ':');
+    if (!name || !name.trim()) return;
+    try {
+      const { option } = await api('/systems/options/' + kind, { method: 'POST', body: { name: name.trim() } });
+      const list = kind === 'categories' ? state.systemOptions.categories : state.systemOptions.niches;
+      list.push(option.name);
+      list.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      if (selectEl) {
+        const opt = el('option', { value: option.name, selected: true }, [option.name]);
+        selectEl.appendChild(opt);
+      } else {
+        render();
+      }
+      toast((kind === 'categories' ? 'Filtro' : 'Nicho') + ' cadastrado.');
+    } catch (err) { toast(err.message, true); }
+  }
+
+  function buildTaxonomyField(kind, selected) {
+    const multiple = kind === 'categories';
+    const values = multiple ? systemCategories() : (state.systemOptions.niches || []);
+    const selectedValues = multiple ? (Array.isArray(selected) ? selected : []) : [selected || ''];
+    const select = el('select', {
+      multiple: multiple ? true : null,
+      class: multiple ? 'category-select' : '',
+      size: multiple ? String(Math.min(Math.max(values.length, 3), 8)) : null,
+    }, [
+      multiple ? null : el('option', { value: '' }, ['Selecione um nicho']),
+      ...values.map((value) => el('option', {
+        value,
+        selected: selectedValues.includes(value) ? true : null,
+      }, [value])),
+    ]);
+    const addBtn = el('button', {
+      type: 'button', class: 'btn btn-ghost btn-sm taxonomy-add-btn',
+      onclick: () => createSystemOption(kind, select),
+    }, [el('span', { html: icon('plus') }), kind === 'categories' ? ' Novo filtro' : ' Novo nicho']);
+    return { select, addBtn };
   }
 
   function currentPage() {
@@ -936,7 +995,8 @@
     const isUsers = page && page.type === 'users';
     const isLeads = page && page.type === 'leads';
     const isCandidates = page && page.type === 'candidates';
-    const isSpecial = isSystems || isDashboard || isUsers || isLeads || isCandidates;
+    const isPublicSites = page && page.type === 'public_sites';
+    const isSpecial = isSystems || isDashboard || isUsers || isLeads || isCandidates || isPublicSites;
 
     const header = el('div', { class: 'main-header' }, [
       el('div', { class: 'page-title-wrap' }, [
@@ -947,6 +1007,11 @@
           class: 'btn btn-primary btn-sm',
           onclick: () => openSystemModal('create'),
         }, [el('span', { html: icon('plus') }), ' Novo Sistema']),
+      ]) : (isPublicSites ? el('div', { class: 'toolbox' }, [
+        el('button', {
+          class: 'btn btn-primary btn-sm',
+          onclick: () => copyPublicSitesLink(),
+        }, [el('span', { html: icon('link') }), ' Copiar link público']),
       ]) : (isUsers ? el('div', { class: 'toolbox' }, [
         el('button', {
           class: 'btn btn-primary btn-sm',
@@ -971,7 +1036,7 @@
           el('button', { class: state.mode === 'edit' ? 'active' : '', onclick: () => { state.mode = 'edit'; render(); } }, ['Editar']),
           el('button', { class: state.mode === 'preview' ? 'active' : '', onclick: () => { state.mode = 'preview'; state.selectedElementId = null; render(); } }, ['Visualizar']),
         ]),
-      ]))))),
+      ])))))),
     ]);
 
     main.appendChild(header);
@@ -983,6 +1048,11 @@
 
     if (isDashboard) {
       main.appendChild(buildDashboard());
+      return main;
+    }
+
+    if (isPublicSites) {
+      main.appendChild(buildPublicSitesManager());
       return main;
     }
 
@@ -1731,6 +1801,100 @@
     }
   }
 
+  async function copyPublicSitesLink() {
+    let link = state.systemOptions.public_url;
+    if (!link) {
+      await loadSystemOptions();
+      link = state.systemOptions.public_url;
+    }
+    if (!link) { toast('Não foi possível gerar o link público.', true); return; }
+    try {
+      await navigator.clipboard.writeText(link);
+      toast('Link dos Sites públicos copiado.');
+    } catch (err) {
+      prompt('Copie o link público:', link);
+    }
+  }
+
+  function buildPublicSitesManager() {
+    const wrap = el('div', { class: 'canvas-scroll' });
+    const inner = el('div', { class: 'sysmgr' });
+    const card = el('div', { class: 'sysmgr-card grow' });
+    const published = (state.systems || []).filter((sys) => sys.is_public);
+
+    card.appendChild(el('div', { class: 'sysmgr-header-row' }, [
+      el('div', { class: 'htext' }, [
+        el('h3', {}, [el('span', { html: icon('globe') }), ' Vitrine pública']),
+        el('p', { class: 'sysmgr-sub' }, ['Somente sistemas marcados como públicos aparecem para quem recebe o link.']),
+      ]),
+      state.systemOptions.public_url ? el('a', {
+        class: 'btn btn-ghost btn-sm', href: state.systemOptions.public_url, target: '_blank', rel: 'noopener',
+      }, [el('span', { html: icon('launch') }), ' Abrir página']) : null,
+    ]));
+
+    const search = el('input', {
+      type: 'search', class: 'sysmgr-search-input', placeholder: 'Pesquisar sites e sistemas…',
+      value: state.publicSitesSearch,
+    });
+    card.appendChild(el('div', { class: 'sysmgr-search' }, [
+      el('span', { class: 'search-icon', html: icon('search') }), search,
+    ]));
+
+    const nicheBar = el('div', { class: 'sysmgr-filters' });
+    (state.systemOptions.niches || []).forEach((niche) => {
+      nicheBar.appendChild(el('button', {
+        type: 'button', class: 'filter-chip' + (state.publicSitesNiche === niche ? ' active' : ''),
+        onclick: () => { state.publicSitesNiche = state.publicSitesNiche === niche ? '' : niche; render(); },
+      }, [niche]));
+    });
+    card.appendChild(nicheBar);
+
+    const grid = el('div', { class: 'public-sites-grid' });
+    const refresh = () => {
+      state.publicSitesSearch = search.value;
+      const term = state.publicSitesSearch.trim().toLowerCase();
+      const visible = published.filter((sys) => {
+        const hay = [sys.name, sys.url, sys.niche, sys.specifications, ...(sys.categories || [])].join(' ').toLowerCase();
+        return (!term || hay.includes(term)) && (!state.publicSitesNiche || sys.niche === state.publicSitesNiche);
+      });
+      grid.innerHTML = '';
+      if (!visible.length) {
+        grid.appendChild(el('div', { class: 'sysmgr-empty public-sites-empty' }, [
+          published.length ? 'Nenhum item corresponde aos filtros.' : 'Nenhum sistema foi marcado para publicação ainda.',
+        ]));
+      } else {
+        visible.forEach((sys) => grid.appendChild(buildPublicSiteCard(sys, true)));
+      }
+    };
+    search.addEventListener('input', refresh);
+    refresh();
+    card.appendChild(grid);
+    inner.appendChild(card);
+    wrap.appendChild(inner);
+    return wrap;
+  }
+
+  function buildPublicSiteCard(sys, internalPreview) {
+    const logo = sys.logo
+      ? el('img', { src: sys.logo, alt: '' })
+      : el('span', { class: 'public-site-fallback' }, [(sys.name || '?').charAt(0).toUpperCase()]);
+    return el('article', { class: 'public-site-card' }, [
+      el('div', { class: 'public-site-logo' }, [logo]),
+      el('div', { class: 'public-site-content' }, [
+        el('div', { class: 'public-site-meta' }, [sys.niche || 'Sem nicho']),
+        el('h3', {}, [sys.name]),
+        el('p', {}, [sys.specifications || 'Conheça este projeto da Hello Inova.']),
+        el('div', { class: 'sysmgr-row-badges' }, (sys.categories || []).map((cat) =>
+          el('span', { class: 'category-badge' }, [cat])
+        )),
+        el('a', {
+          class: 'btn btn-primary btn-sm public-site-visit', href: normalizedUrl(sys.url),
+          target: '_blank', rel: 'noopener',
+        }, [el('span', { html: icon('launch') }), internalPreview ? ' Acessar sistema' : ' Visitar']),
+      ]),
+    ]);
+  }
+
   function buildSystemsManager() {
     const wrap = el('div', { class: 'canvas-scroll' });
     const inner = el('div', { class: 'sysmgr' });
@@ -1762,7 +1926,7 @@
 
     // ---- Filtros por tipo de sistema ----
     const filterBar = el('div', { class: 'sysmgr-filters' });
-    SYSTEM_CATEGORIES.forEach((cat) => {
+    systemCategories().forEach((cat) => {
       const active = state.systemsFilterCategories.includes(cat);
       const chip = el('button', { type: 'button', class: 'filter-chip' + (active ? ' active' : '') }, [cat]);
       chip.addEventListener('click', () => {
@@ -1773,6 +1937,9 @@
       });
       filterBar.appendChild(chip);
     });
+    filterBar.appendChild(el('button', {
+      type: 'button', class: 'filter-chip add', onclick: () => createSystemOption('categories'),
+    }, ['+ Novo filtro']));
     if (state.systemsFilterCategories.length) {
       const clearBtn = el('button', { type: 'button', class: 'filter-chip clear' }, ['Limpar filtros']);
       clearBtn.addEventListener('click', () => { state.systemsFilterCategories = []; render(); });
@@ -2486,12 +2653,18 @@
       el('div', { class: 'view-modal-grid' }, [
         viewField('E-mail de acesso', sys.login_email || '—'),
         buildPasswordViewField(sys),
+        viewField('Nicho', sys.niche || '—'),
+        viewField('Publicação', sys.is_public ? 'Publicado em Sites públicos' : 'Somente interno'),
         viewField('Repositório', sys.repo_url
           ? el('a', { href: normalizedUrl(sys.repo_url), target: '_blank', rel: 'noopener' }, [sys.repo_url])
           : '—'),
         viewField('Cadastrado em', sys.created_at ? formatDateBR(sys.created_at) : '—'),
         viewField('Atualizado em', sys.updated_at ? formatDateBR(sys.updated_at) : '—'),
       ]),
+      sys.specifications ? el('div', { class: 'field-full' }, [
+        el('div', { class: 'field-section-title' }, ['Especificações']),
+        el('p', { class: 'system-specifications' }, [sys.specifications]),
+      ]) : null,
       buildLinksView(sys.links),
       buildContactSection(sys),
       buildAttachmentsSection(sys),
@@ -2536,6 +2709,10 @@
       type: 'password', placeholder: 'Deixe em branco para manter a atual',
       autocomplete: 'new-password', value: sys.login_password || '',
     });
+    const specificationsInput = el('textarea', {
+      rows: '6', placeholder: 'Descreva funcionalidades, diferenciais e informações relevantes…',
+    }, [sys.specifications || '']);
+    const publicInput = el('input', { type: 'checkbox', checked: sys.is_public ? true : null });
     const passToggle = el('button', {
       type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
       html: icon('eye'),
@@ -2547,12 +2724,9 @@
     });
 
     const existingCategories = Array.isArray(sys.categories) ? sys.categories : [];
-    const categorySelect = el('select', { multiple: true, class: 'category-select', size: String(SYSTEM_CATEGORIES.length) },
-      SYSTEM_CATEGORIES.map((cat) => el('option', {
-        value: cat,
-        selected: existingCategories.includes(cat) ? true : null,
-      }, [cat]))
-    );
+    const categoryField = buildTaxonomyField('categories', existingCategories);
+    const categorySelect = categoryField.select;
+    const nicheField = buildTaxonomyField('niches', sys.niche || '');
 
     const subsEditor = buildSubscriptionsEditor(sys.subscriptions || []);
     const linksEditor = buildLinksEditor(sys.links || []);
@@ -2616,6 +2790,9 @@
         const body = {
           name, url, repo_url: repoUrl, login_email: email, logo: logoData,
           categories,
+          niche: nicheField.select.value,
+          specifications: specificationsInput.value.trim(),
+          is_public: publicInput.checked,
           subscriptions: subsEditor.getSubscriptions(),
           contact_name: contactFields.nameInput.value.trim(),
           contact_whatsapp: contactFields.whatsappInput.value.trim(),
@@ -2652,7 +2829,21 @@
       el('div', { class: 'field field-tall' }, [
         el('label', {}, ['Tipo de sistema']),
         categorySelect,
+        categoryField.addBtn,
         el('div', { class: 'field-hint' }, ['Segure Ctrl (ou Cmd no Mac) para selecionar mais de uma opção.']),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Nicho']), nicheField.select, nicheField.addBtn,
+      ]),
+      el('div', { class: 'field field-full' }, [
+        el('label', {}, ['Especificações do sistema']), specificationsInput,
+      ]),
+      el('label', { class: 'publish-check field-full' }, [
+        publicInput,
+        el('span', {}, [
+          el('strong', {}, ['Publicar em Sites públicos']),
+          el('small', {}, ['Qualquer pessoa com o link poderá visualizar este sistema.']),
+        ]),
       ]),
       el('div', { class: 'field' }, [el('label', {}, ['E-mail do sistema']), emailInput]),
       el('div', { class: 'field' }, [
@@ -2705,10 +2896,13 @@
     const repoUrlInput = el('input', { type: 'text', placeholder: 'https://github.com/sua-org/seu-repo' });
     const emailInput = el('input', { type: 'text', placeholder: 'usuario@sistema.com', autocomplete: 'off' });
     const passInput = el('input', { type: 'password', placeholder: '••••••••', autocomplete: 'new-password' });
-
-    const categorySelect = el('select', { multiple: true, class: 'category-select', size: String(SYSTEM_CATEGORIES.length) },
-      SYSTEM_CATEGORIES.map((cat) => el('option', { value: cat }, [cat]))
-    );
+    const specificationsInput = el('textarea', {
+      rows: '6', placeholder: 'Descreva funcionalidades, diferenciais e informações relevantes…',
+    });
+    const publicInput = el('input', { type: 'checkbox' });
+    const categoryField = buildTaxonomyField('categories', []);
+    const categorySelect = categoryField.select;
+    const nicheField = buildTaxonomyField('niches', '');
 
     const subsEditor = buildSubscriptionsEditor([]);
     const linksEditor = buildLinksEditor([]);
@@ -2776,6 +2970,9 @@
         const body = {
           name, url, repo_url: repoUrl, login_email: email, logo: logoData,
           categories,
+          niche: nicheField.select.value,
+          specifications: specificationsInput.value.trim(),
+          is_public: publicInput.checked,
           subscriptions: subsEditor.getSubscriptions(),
           contact_name: contactFields.nameInput.value.trim(),
           contact_whatsapp: contactFields.whatsappInput.value.trim(),
@@ -2811,7 +3008,21 @@
       el('div', { class: 'field field-tall' }, [
         el('label', {}, ['Tipo de sistema']),
         categorySelect,
+        categoryField.addBtn,
         el('div', { class: 'field-hint' }, ['Segure Ctrl (ou Cmd no Mac) para selecionar mais de uma opção.']),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['Nicho']), nicheField.select, nicheField.addBtn,
+      ]),
+      el('div', { class: 'field field-full' }, [
+        el('label', {}, ['Especificações do sistema']), specificationsInput,
+      ]),
+      el('label', { class: 'publish-check field-full' }, [
+        publicInput,
+        el('span', {}, [
+          el('strong', {}, ['Publicar em Sites públicos']),
+          el('small', {}, ['Qualquer pessoa com o link poderá visualizar este sistema.']),
+        ]),
       ]),
       el('div', { class: 'field' }, [el('label', {}, ['E-mail do sistema']), emailInput]),
       el('div', { class: 'field' }, [

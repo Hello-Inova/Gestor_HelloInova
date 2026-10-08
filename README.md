@@ -10,6 +10,8 @@ Identidade visual aplicada em todo o sistema: fundo escuro, gradiente azul, tipo
 - **Recuperação de senha** ("Esqueci minha senha" na tela de login): envia um link por e-mail que abre um pop-up para definir e confirmar a nova senha (com visualizador de senha), redirecionando para o login ao concluir.
 - **Menu lateral esquerdo** com os módulos de navegação do sistema.
 - **Módulo "Gestor de Sistemas"** (criado automaticamente para todo usuário): cadastre os sistemas geridos pela Hello Inova com nome, link de acesso, e-mail e senha, e use o botão **"Login As"** para abrir o sistema em uma nova aba com a senha copiada para a área de transferência, pronta para colar. Por restrição de segurança dos navegadores (política de mesma origem), não é possível preencher automaticamente o formulário de login de outro site a partir do navegador — por isso o fluxo é "abrir + copiar para colar".
+- **Módulo "Sites públicos"**: vitrine acessível sem login por um link exclusivo da conta. Exibe somente os sistemas marcados para publicação, com pesquisa e filtro por nicho; credenciais e documentos internos nunca são enviados pela API pública.
+- **Filtros e nichos personalizáveis**: novos chips de tipo de sistema e novos nichos podem ser cadastrados diretamente na Gestão de Sistemas.
 - **Módulos personalizados**: crie quantos módulos quiser além do Gestor de Sistemas, cada um com seu próprio editor de elementos.
 - **Edição do nome do módulo** diretamente no menu (duplo clique ou ícone de lápis).
 - **Criação e exclusão de módulos**, com reordenação (setas para cima/baixo). O módulo "Gestor de Sistemas" não pode ser excluído.
@@ -85,7 +87,8 @@ A rota de backend `POST /api/auth/register` continua existindo (sem tela própri
 - **users**: id, name, email, password_hash, role, account_id (conta/espaço de trabalho ao qual pertence), email_verified, created_at
 - **pages** (módulos, compartilhados por conta via `account_id`): id, user_id (guarda o `account_id` do dono), name, type (`systems` | `dashboard` | `users` | `canvas`), order_index, created_at
 - **elements**: id, page_id, type (`label` | `input` | `button`), content, placeholder, x, y, width, height (em %), font_size, font_color, bg_color, border_radius, font_weight, z_index
-- **systems** (compartilhados por conta): id, user_id (guarda o `account_id` do dono), name, url, login_email, login_password_enc (criptografada), categories, subscriptions, contract_file (anexo único de contrato), documentation_files (lista de PDFs da "Documentação Sistêmica"), links (lista livre de links adicionais, nome + URL), created_at, updated_at
+- **systems** (compartilhados por conta): id, user_id (guarda o `account_id` do dono), name, url, login_email, login_password_enc (criptografada), categories, niche, specifications, is_public, subscriptions, contract_file (anexo único de contrato), documentation_files (lista de PDFs da "Documentação Sistêmica"), links (lista livre de links adicionais, nome + URL), created_at, updated_at
+- **system_taxonomies**: filtros e nichos personalizados de cada conta.
 - **verification_codes** / **login_attempts**: suporte ao login em duas etapas e à trava de força bruta.
 - **password_resets**: tokens de recuperação de senha (link por e-mail), com hash SHA-256 do token, expiração de 30 minutos e uso único.
 

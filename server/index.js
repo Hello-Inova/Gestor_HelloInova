@@ -12,6 +12,7 @@ const systemRoutes = require('./routes/systems');
 const dashboardRoutes = require('./routes/dashboard');
 const leadRoutes = require('./routes/leads');
 const candidateRoutes = require('./routes/candidates');
+const publicSiteRoutes = require('./routes/public-sites');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,6 +42,7 @@ app.use('/api/systems', systemRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/candidates', candidateRoutes);
+app.use('/api/public-sites', publicSiteRoutes);
 
 // Frontend estático — precisa estar em public/** na raiz do projeto (a
 // Vercel serve esse diretório direto pela CDN e ignora express.static() nas
@@ -53,6 +55,10 @@ app.use(express.static(CLIENT_DIR));
 // pensada para ser usada em bio do Instagram/links externos.
 app.get('/captacao', (req, res) => {
   res.sendFile(path.join(CLIENT_DIR, 'captacao.html'));
+});
+
+app.get('/sites-publicos/:slug', (req, res) => {
+  res.sendFile(path.join(CLIENT_DIR, 'public-sites.html'));
 });
 
 // Qualquer rota não-API cai no SPA (index.html cuida do roteamento client-side)

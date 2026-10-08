@@ -80,6 +80,8 @@ const SCHEMA_SQL = `
     dashboard_seeded INTEGER NOT NULL DEFAULT 0,
     leads_seeded INTEGER NOT NULL DEFAULT 0,
     candidates_seeded INTEGER NOT NULL DEFAULT 0,
+    public_sites_seeded INTEGER NOT NULL DEFAULT 0,
+    public_slug TEXT,
     email_verified INTEGER NOT NULL DEFAULT 0,
     account_id INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -132,6 +134,9 @@ const SCHEMA_SQL = `
     contract_file_name TEXT DEFAULT '',
     documentation_files TEXT DEFAULT '[]',
     links TEXT DEFAULT '[]',
+    specifications TEXT DEFAULT '',
+    is_public INTEGER NOT NULL DEFAULT 0,
+    niche TEXT DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
@@ -142,11 +147,29 @@ const SCHEMA_SQL = `
   -- um ALTER TABLE explícito e idempotente como este.
   ALTER TABLE systems ADD COLUMN IF NOT EXISTS documentation_files TEXT DEFAULT '[]';
   ALTER TABLE systems ADD COLUMN IF NOT EXISTS links TEXT DEFAULT '[]';
+  ALTER TABLE systems ADD COLUMN IF NOT EXISTS specifications TEXT DEFAULT '';
+  ALTER TABLE systems ADD COLUMN IF NOT EXISTS is_public INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE systems ADD COLUMN IF NOT EXISTS niche TEXT DEFAULT '';
 
   -- Mesma lógica: "users" já existia em produção antes do módulo de Leads,
   -- então a coluna de seeding precisa do ALTER TABLE idempotente também.
   ALTER TABLE users ADD COLUMN IF NOT EXISTS leads_seeded INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS candidates_seeded INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS public_sites_seeded INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS public_slug TEXT;
+  UPDATE users
+     SET public_slug = md5(random()::text || clock_timestamp()::text || id::text)
+   WHERE public_slug IS NULL OR public_slug = '';
+  CREATE UNIQUE INDEX IF NOT EXISTS users_public_slug_unique ON users(public_slug);
+
+  CREATE TABLE IF NOT EXISTS system_taxonomies (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('category', 'niche')),
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(account_id, kind, name)
+  );
 
   -- Leads captados pelo formulário público (public/captacao.html). Tabela
   -- sem "user_id"/"account_id": o formulário público não tem contexto de

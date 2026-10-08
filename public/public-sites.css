@@ -1,0 +1,46 @@
+:root {
+  --bg: #05060a;
+  --panel: #10131e;
+  --border: rgba(96,140,255,.2);
+  --blue: #2f7bff;
+  --blue-light: #6eafff;
+  --text: #f5f8ff;
+  --muted: #9aa6c1;
+  font-family: Inter, system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; color: var(--text); background: radial-gradient(circle at 80% 0, rgba(47,123,255,.2), transparent 32rem), var(--bg); }
+.public-header { padding: 34px max(24px, calc((100vw - 1180px)/2)); border-bottom: 1px solid var(--border); }
+.public-brand img { width: 150px; height: 42px; object-fit: contain; object-position: left center; }
+.public-hero { max-width: 760px; padding: 72px 0 36px; }
+.eyebrow { color: var(--blue-light); text-transform: uppercase; letter-spacing: 2px; font-size: 12px; font-weight: 700; }
+.public-hero h1 { margin: 14px 0; font: 800 clamp(34px, 6vw, 62px)/1.08 Poppins, sans-serif; letter-spacing: -2px; }
+.public-hero p { margin: 0; color: var(--muted); font-size: 18px; }
+.public-main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 42px 0 70px; }
+.public-controls { display: flex; flex-direction: column; gap: 18px; }
+.public-search { position: relative; display: block; }
+.public-search span { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 24px; }
+.public-search input { width: 100%; padding: 15px 18px 15px 48px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 12px; outline: none; font: inherit; }
+.public-search input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,123,255,.18); }
+.public-filters { display: flex; flex-wrap: wrap; gap: 9px; }
+.public-filters button { padding: 8px 15px; color: #cbd4e8; background: transparent; border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font: 600 13px Inter, sans-serif; }
+.public-filters button.active { color: white; border-color: transparent; background: linear-gradient(135deg, #123fd6, var(--blue)); }
+.public-count { margin: 24px 0 14px; color: var(--muted); font-size: 13px; }
+.public-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+.site-card { display: flex; flex-direction: column; min-height: 390px; overflow: hidden; background: linear-gradient(180deg, #111522, #0b0e16); border: 1px solid var(--border); border-radius: 18px; transition: transform .2s, border-color .2s; }
+.site-card:hover { transform: translateY(-4px); border-color: rgba(96,140,255,.45); }
+.site-visual { height: 170px; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(47,123,255,.2), transparent 70%), #070910; border-bottom: 1px solid var(--border); }
+.site-visual img { width: 100%; height: 100%; object-fit: contain; padding: 24px; }
+.site-fallback { font: 800 54px Poppins, sans-serif; color: var(--blue-light); }
+.site-content { display: flex; flex: 1; flex-direction: column; padding: 22px; }
+.site-niche { color: var(--blue-light); font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
+.site-content h2 { margin: 6px 0 10px; font: 700 20px Poppins, sans-serif; }
+.site-description { margin: 0 0 16px; color: var(--muted); font-size: 13.5px; line-height: 1.6; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.site-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.site-badges span { padding: 4px 9px; color: var(--blue-light); background: rgba(47,123,255,.12); border: 1px solid rgba(47,123,255,.25); border-radius: 999px; font-size: 10.5px; font-weight: 700; }
+.site-link { align-self: flex-start; margin-top: auto; padding: 10px 15px; color: white; background: linear-gradient(135deg, #123fd6, var(--blue)); border-radius: 9px; text-decoration: none; font-size: 13px; font-weight: 700; }
+.public-state { grid-column: 1/-1; padding: 64px 20px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: 18px; }
+.public-state.error { color: #ff9eaf; }
+.public-footer { padding: 26px 20px; color: var(--muted); border-top: 1px solid var(--border); text-align: center; font-size: 12px; }
+@media (max-width: 640px) { .public-header { padding: 24px 20px; } .public-hero { padding: 50px 0 22px; } .public-hero h1 { letter-spacing: -1px; } .public-grid { grid-template-columns: 1fr; } }
