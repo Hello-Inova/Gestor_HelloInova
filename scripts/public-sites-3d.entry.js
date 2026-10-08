@@ -59,10 +59,9 @@ if (canvas && !reduceMotion) {
       target.y = (event.clientY / window.innerHeight - 0.5) * 2;
     }, { passive: true });
 
-    const clock = new THREE.Clock();
-    renderer.setAnimationLoop(() => {
+    renderer.setAnimationLoop((timestamp) => {
       if (document.hidden) return;
-      const elapsed = clock.getElapsedTime();
+      const elapsed = timestamp / 1000;
       pointer.lerp(target, 0.035);
       particles.rotation.y = elapsed * 0.018;
       particles.rotation.x = elapsed * 0.006;
