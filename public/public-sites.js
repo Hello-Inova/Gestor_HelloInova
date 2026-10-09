@@ -5,6 +5,7 @@
   const search = document.getElementById('public-search');
   const filters = document.getElementById('public-niches');
   const count = document.getElementById('public-count');
+  document.getElementById('footer-year').textContent = new Date().getFullYear();
   const sidebar = document.getElementById('public-sidebar');
   const menuToggle = document.getElementById('public-menu-toggle');
   const menuOverlay = document.getElementById('public-menu-overlay');
