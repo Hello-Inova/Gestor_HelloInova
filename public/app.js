@@ -1599,10 +1599,14 @@
     novo: 'Novo',
     em_analise: 'Em análise',
     entrevista: 'Entrevista',
+    em_negociacao: 'Em negociação',
     aprovado: 'Aprovado',
     recusado: 'Recusado',
+    contato_inexistente: 'Contato inexistente',
   };
-  const CANDIDATE_STATUS_ORDER = ['novo', 'em_analise', 'entrevista', 'aprovado', 'recusado'];
+  const CANDIDATE_STATUS_ORDER = [
+    'novo', 'em_analise', 'entrevista', 'em_negociacao', 'aprovado', 'recusado', 'contato_inexistente',
+  ];
   const CANDIDATE_EXPERIENCE_OPTIONS = ['Estou começando', 'Até 1 ano', 'De 1 a 3 anos', 'Mais de 3 anos'];
 
   function buildCandidatesManager() {

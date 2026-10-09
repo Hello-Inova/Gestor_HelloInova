@@ -12,7 +12,15 @@ const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_EXPERIENCE = ['Estou começando', 'Até 1 ano', 'De 1 a 3 anos', 'Mais de 3 anos'];
-const VALID_STATUSES = ['novo', 'em_analise', 'entrevista', 'aprovado', 'recusado'];
+const VALID_STATUSES = [
+  'novo',
+  'em_analise',
+  'entrevista',
+  'em_negociacao',
+  'aprovado',
+  'recusado',
+  'contato_inexistente',
+];
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://hello-inova.github.io',
   'https://hello-inova-sdr-freelancer.foggy-char-1093.chatgpt.site',

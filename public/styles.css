@@ -1831,8 +1831,10 @@ button { font-family: inherit; }
 .candidate-status-badge.status-novo { background: rgba(47, 123, 255, 0.14); color: var(--blue-400); border-color: rgba(47, 123, 255, 0.35); }
 .candidate-status-badge.status-em_analise { background: rgba(255, 191, 71, 0.14); color: #ffbf47; border-color: rgba(255, 191, 71, 0.35); }
 .candidate-status-badge.status-entrevista { background: rgba(167, 112, 255, 0.14); color: #bd91ff; border-color: rgba(167, 112, 255, 0.35); }
+.candidate-status-badge.status-em_negociacao { background: rgba(34, 199, 232, 0.14); color: #55d9f3; border-color: rgba(34, 199, 232, 0.35); }
 .candidate-status-badge.status-aprovado { background: rgba(47, 224, 160, 0.14); color: var(--success); border-color: rgba(47, 224, 160, 0.35); }
 .candidate-status-badge.status-recusado { background: rgba(255, 84, 112, 0.12); color: var(--danger); border-color: rgba(255, 84, 112, 0.3); }
+.candidate-status-badge.status-contato_inexistente { background: rgba(148, 163, 184, 0.12); color: #b8c2d2; border-color: rgba(148, 163, 184, 0.3); }
 
 .candidate-edit-body { overflow-y: auto; }
 .candidate-edit-grid {
