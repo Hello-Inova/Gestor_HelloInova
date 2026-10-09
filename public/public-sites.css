@@ -84,7 +84,8 @@ body {
 .sidebar-contact a:hover,
 .hero-contact:hover { transform: translateY(-2px); box-shadow: 0 17px 38px rgba(22,87,255,.4); }
 .public-menu-toggle,
-.public-menu-overlay { display: none; }
+.public-menu-overlay,
+.public-hero-nav { display: none; }
 .public-header {
   min-height: 640px;
   padding: 34px max(24px, calc((100vw - 264px - 1180px)/2));
@@ -224,6 +225,26 @@ body {
 @keyframes premium-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 900px) {
   .public-page { margin-left: 0; }
+  .public-hero-nav {
+    position: fixed;
+    z-index: 11;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 72px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(96,140,255,.16);
+    background: linear-gradient(180deg, rgba(5,7,12,.9), rgba(5,7,12,.66));
+    box-shadow: 0 12px 36px rgba(0,0,0,.14);
+    backdrop-filter: blur(18px);
+    transition: background .25s, border-color .25s;
+  }
+  .public-brand-mobile { display: inline-flex; }
+  .public-brand-mobile img { width: 48px; height: 48px; }
+  .public-brand-mobile .public-brand-name { font-size: 25px; }
   .public-sidebar {
     width: min(82vw, 290px);
     transform: translateX(-105%);
@@ -231,10 +252,8 @@ body {
   }
   .public-sidebar.open { transform: translateX(0); }
   .public-menu-toggle {
-    position: fixed;
+    position: relative;
     z-index: 12;
-    top: 18px;
-    right: 18px;
     display: grid;
     place-content: center;
     gap: 5px;
@@ -252,17 +271,23 @@ body {
   .public-menu-toggle.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
   .public-menu-toggle.open span:nth-child(2) { opacity: 0; }
   .public-menu-toggle.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+  .public-menu-toggle.open { position: fixed; top: 18px; right: 18px; }
+  body.menu-open .public-hero-nav { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; pointer-events: none; }
+  body.menu-open .public-brand-mobile { opacity: 0; }
+  body.menu-open .public-menu-toggle { pointer-events: auto; }
   .public-menu-overlay { position: fixed; z-index: 9; inset: 0; background: rgba(2,4,8,.68); backdrop-filter: blur(4px); }
   .public-menu-overlay.open { display: block; }
   body.menu-open { overflow: hidden; }
-  .public-header { padding-left: max(24px, calc((100vw - 1180px)/2)); padding-right: max(76px, calc((100vw - 1180px)/2)); }
+  .public-header { padding-left: max(24px, calc((100vw - 1180px)/2)); padding-right: max(24px, calc((100vw - 1180px)/2)); }
 }
 @media (max-width: 640px) {
   .public-header { min-height: 570px; padding: 22px 20px; }
   .public-brand { gap: 10px; }
   .public-brand img { width: 46px; height: 46px; }
   .public-brand-name { font-size: 25px; }
-  .public-hero { padding: 70px 0 30px; }
+  .public-brand-mobile img { width: 44px; height: 44px; }
+  .public-brand-mobile .public-brand-name { font-size: 23px; }
+  .public-hero { padding: 58px 0 30px; }
   .public-hero h1 { font-size: clamp(30px, 10vw, 42px); letter-spacing: -1px; }
   .public-hero p { font-size: 15px; }
   .public-hero-actions { margin-top: 26px; }
