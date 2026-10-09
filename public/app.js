@@ -2001,7 +2001,7 @@
   }
 
   function buildPublicSitesManager() {
-    const wrap = el('div', { class: 'canvas-scroll' });
+    const wrap = el('div', { class: 'canvas-scroll public-sites-scroll' });
     const inner = el('div', { class: 'sysmgr' });
     const card = el('div', { class: 'sysmgr-card grow' });
     const published = (state.systems || []).filter((sys) => sys.is_public);

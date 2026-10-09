@@ -893,6 +893,25 @@ button { font-family: inherit; }
 .public-sites-grid::-webkit-scrollbar-track { background: rgba(255, 255, 255, .035); border-radius: 999px; }
 .public-sites-grid::-webkit-scrollbar-thumb { background: rgba(96, 140, 255, .42); border-radius: 999px; }
 .public-sites-grid::-webkit-scrollbar-thumb:hover { background: rgba(96, 140, 255, .62); }
+.public-sites-scroll {
+  min-height: 0;
+  overflow: hidden;
+}
+.public-sites-scroll .sysmgr {
+  height: 100%;
+  min-height: 0;
+}
+.public-sites-scroll .sysmgr-card.grow {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.public-sites-scroll .public-sites-grid {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  overflow-y: scroll;
+}
 .public-sites-empty { width: 100%; }
 .public-site-card {
   display: grid;
@@ -953,6 +972,9 @@ button { font-family: inherit; }
 .public-site-visit { align-self: center; text-decoration: none; }
 
 @media (max-width: 700px) {
+  .public-sites-scroll { min-height: auto; overflow: auto; }
+  .public-sites-scroll .sysmgr,
+  .public-sites-scroll .sysmgr-card.grow { height: auto; overflow: visible; }
   .public-sites-grid { flex: none; min-height: 0; max-height: none; overflow-y: visible; padding-right: 0; }
   .public-site-card { grid-template-columns: 58px minmax(0, 1fr); gap: 12px; padding: 13px; }
   .public-site-logo { width: 56px; height: 56px; border-radius: 12px; }
