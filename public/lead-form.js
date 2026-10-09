@@ -70,6 +70,7 @@
   const state = {
     step: 1,
     leadId: null,
+    leadToken: '',
     submitting: false,
     error: '',
     step1: { name: '', whatsapp: '', email: '' },
@@ -275,6 +276,7 @@
         },
       });
       state.leadId = data.id;
+      state.leadToken = data.update_token;
       state.submitting = false;
       state.step = 2;
       render();
@@ -438,6 +440,7 @@
           business_segment: state.step2.businessSegment,
           business_segment_other: state.step2.businessSegment === 'Outros' ? state.step2.businessSegmentOther.trim() : '',
           description: buildFinalDescription(),
+          update_token: state.leadToken,
         },
       });
       state.submitting = false;

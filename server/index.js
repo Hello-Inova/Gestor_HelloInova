@@ -5,6 +5,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 
 const db = require('./db');
+const { applySecurityHeaders, protectUnsafeRequests } = require('./security');
 
 const authRoutes = require('./routes/auth');
 const pageRoutes = require('./routes/pages');
@@ -25,8 +26,9 @@ app.set('trust proxy', 1);
 
 // Limite maior para caber vários anexos em base64 (logo, contrato e os PDFs
 // da documentação sistêmica) numa mesma requisição.
-app.use(express.json({ limit: '30mb' }));
 app.use(cookieParser());
+app.use(applySecurityHeaders);
+app.use(protectUnsafeRequests);
 
 // Garante que o schema do Postgres já exista antes de qualquer rota rodar
 // uma query. Numa função serverless (Vercel) isso roda de verdade só no
@@ -36,13 +38,13 @@ app.use((req, res, next) => {
   db.ready().then(() => next(), next);
 });
 
-app.use('/api/auth', authRoutes);
-app.use('/api/pages', pageRoutes);
-app.use('/api/systems', systemRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/leads', leadRoutes);
-app.use('/api/candidates', candidateRoutes);
-app.use('/api/public-sites', publicSiteRoutes);
+app.use('/api/auth', express.json({ limit: '64kb' }), authRoutes);
+app.use('/api/pages', express.json({ limit: '256kb' }), pageRoutes);
+app.use('/api/systems', express.json({ limit: '30mb' }), systemRoutes);
+app.use('/api/dashboard', express.json({ limit: '64kb' }), dashboardRoutes);
+app.use('/api/leads', express.json({ limit: '64kb' }), leadRoutes);
+app.use('/api/candidates', express.json({ limit: '64kb' }), candidateRoutes);
+app.use('/api/public-sites', express.json({ limit: '64kb' }), publicSiteRoutes);
 
 // Frontend estático — precisa estar em public/** na raiz do projeto (a
 // Vercel serve esse diretório direto pela CDN e ignora express.static() nas

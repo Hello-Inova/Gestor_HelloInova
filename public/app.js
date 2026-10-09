@@ -677,8 +677,8 @@
         const password = passInput.value;
         const confirmPassword = passConfirm.value;
 
-        if (password.length < 6) {
-          const box = el('div', { class: 'auth-error' }, ['A senha deve ter ao menos 6 caracteres.']);
+        if (password.length < 12) {
+          const box = el('div', { class: 'auth-error' }, ['A senha deve ter ao menos 12 caracteres.']);
           form.insertBefore(box, form.firstChild);
           errorBox = box;
           return;
@@ -1315,7 +1315,7 @@
 
       if (!name) { toast('Informe o nome do usuário.', true); return; }
       if (!email) { toast('Informe o e-mail do usuário.', true); return; }
-      if (!password || password.length < 6) { toast('A senha deve ter ao menos 6 caracteres.', true); return; }
+      if (!password || password.length < 12) { toast('A senha deve ter ao menos 12 caracteres.', true); return; }
 
       saveBtn.disabled = true;
       try {

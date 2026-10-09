@@ -11,6 +11,7 @@ const {
   requireAuth,
 } = require('../auth');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../email');
+const { validatePassword } = require('../security');
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ const router = express.Router();
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CODE_RE = /^\d{6}$/;
 const PURPOSES = ['register', 'login'];
 
 const CODE_LENGTH = 6;
@@ -34,6 +36,10 @@ const RESET_COOLDOWN_SECONDS = 45;
 const LOGIN_RATE_LIMIT_MAX = 3;
 const LOGIN_RATE_LIMIT_WINDOW_MINUTES = 15;
 
+function isValidEmail(email) {
+  return typeof email === 'string' && email.length <= 320 && EMAIL_RE.test(email);
+}
+
 // ---------------- Helpers ----------------
 
 function getClientIp(req) {
@@ -42,8 +48,8 @@ function getClientIp(req) {
 }
 
 // Trava de força bruta: no máximo LOGIN_RATE_LIMIT_MAX tentativas de login
-// por IP a cada LOGIN_RATE_LIMIT_WINDOW_MINUTES minutos. Cada chamada a
-// POST /login (sucesso ou falha) conta como uma tentativa.
+// por IP a cada LOGIN_RATE_LIMIT_WINDOW_MINUTES minutos. Só credenciais
+// inválidas contam; um login válido limpa as falhas anteriores do endereço.
 // LOGIN_RATE_LIMIT_WINDOW_MINUTES é uma constante fixa do código (não vem
 // do usuário), por isso é seguro interpolá-la direto no INTERVAL abaixo.
 async function isLoginRateLimited(ip) {
@@ -56,6 +62,7 @@ async function isLoginRateLimited(ip) {
 }
 
 async function recordLoginAttempt(ip) {
+  await db.run("DELETE FROM login_attempts WHERE created_at < NOW() - INTERVAL '1 day'");
   await db.run('INSERT INTO login_attempts (ip) VALUES (?)', ip);
 }
 
@@ -137,7 +144,13 @@ function hashResetToken(token) {
 }
 
 function loginUser(res, row) {
-  const user = { id: row.id, name: row.name, email: row.email, account_id: row.account_id };
+  const user = {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    account_id: row.account_id,
+    session_version: row.session_version,
+  };
   const token = signToken(user);
   setAuthCookie(res, token);
   return { id: user.id, name: user.name, email: user.email };
@@ -152,12 +165,15 @@ function loginUser(res, row) {
 router.post(
   '/register',
   ah(async (req, res) => {
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PUBLIC_REGISTRATION !== 'true') {
+      return res.status(404).json({ error: 'Rota não encontrada.' });
+    }
     const { name, email, password } = req.body || {};
 
-    if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome.' });
-    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
-    if (!password || password.length < 6)
-      return res.status(400).json({ error: 'A senha deve ter ao menos 6 caracteres.' });
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Informe o nome.' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+    const passwordError = validatePassword(password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
 
     const normalizedEmail = email.toLowerCase();
     const existing = await db.get('SELECT id FROM users WHERE email = ?', normalizedEmail);
@@ -165,7 +181,7 @@ router.post(
 
     const inserted = await db.run(
       'INSERT INTO users (name, email, password_hash, role, email_verified) VALUES (?, ?, ?, ?, 0) RETURNING id',
-      name.trim(),
+      name.trim().slice(0, 200),
       normalizedEmail,
       hashPassword(password),
       'admin'
@@ -228,7 +244,7 @@ router.post(
     );
 
     const code = await createVerificationCode(normalizedEmail, 'register', userId);
-    await sendVerificationEmail({ to: normalizedEmail, name: name.trim(), code, purpose: 'register' });
+    await sendVerificationEmail({ to: normalizedEmail, name: name.trim().slice(0, 200), code, purpose: 'register' });
 
     res.status(201).json({ pending: true, purpose: 'register', email: normalizedEmail });
   })
@@ -239,8 +255,8 @@ router.post(
   '/verify-email',
   ah(async (req, res) => {
     const { email, code } = req.body || {};
-    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
-    if (!code) return res.status(400).json({ error: 'Informe o código recebido por e-mail.' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+    if (!CODE_RE.test(String(code || ''))) return res.status(400).json({ error: 'Código inválido.' });
 
     const normalizedEmail = email.toLowerCase();
     const result = await consumeCode(normalizedEmail, 'register', code);
@@ -267,15 +283,18 @@ router.post(
         error: `Muitas tentativas de login a partir deste endereço. Aguarde ${LOGIN_RATE_LIMIT_WINDOW_MINUTES} minutos e tente novamente.`,
       });
     }
-    await recordLoginAttempt(ip);
-
-    if (!email || !password) return res.status(400).json({ error: 'Informe e-mail e senha.' });
+    if (!isValidEmail(email) || !password) return res.status(400).json({ error: 'Informe e-mail e senha válidos.' });
+    if (typeof password !== 'string' || password.length > 128) {
+      return res.status(400).json({ error: 'Credenciais inválidas.' });
+    }
 
     const normalizedEmail = email.toLowerCase();
     const row = await db.get('SELECT * FROM users WHERE email = ?', normalizedEmail);
     if (!row || !verifyPassword(password, row.password_hash)) {
+      await recordLoginAttempt(ip);
       return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
     }
+    await db.run('DELETE FROM login_attempts WHERE ip = ?', ip);
 
     if (!row.email_verified) {
       const code = await createVerificationCode(normalizedEmail, 'register', row.id);
@@ -299,8 +318,8 @@ router.post(
   '/verify-login',
   ah(async (req, res) => {
     const { email, code } = req.body || {};
-    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
-    if (!code) return res.status(400).json({ error: 'Informe o código recebido por e-mail.' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+    if (!CODE_RE.test(String(code || ''))) return res.status(400).json({ error: 'Código inválido.' });
 
     const normalizedEmail = email.toLowerCase();
     const result = await consumeCode(normalizedEmail, 'login', code);
@@ -319,7 +338,7 @@ router.post(
   '/resend-code',
   ah(async (req, res) => {
     const { email, purpose } = req.body || {};
-    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'E-mail inválido.' });
     if (!PURPOSES.includes(purpose)) return res.status(400).json({ error: 'Finalidade inválida.' });
 
     const normalizedEmail = email.toLowerCase();
@@ -354,7 +373,7 @@ router.post(
   '/forgot-password',
   ah(async (req, res) => {
     const { email } = req.body || {};
-    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'E-mail inválido.' });
 
     const normalizedEmail = email.toLowerCase();
     const row = await db.get('SELECT * FROM users WHERE email = ?', normalizedEmail);
@@ -403,10 +422,11 @@ router.post(
   '/reset-password',
   ah(async (req, res) => {
     const { token, password } = req.body || {};
-    if (!token) return res.status(400).json({ error: 'Link inválido.' });
-    if (!password || password.length < 6) {
-      return res.status(400).json({ error: 'A senha deve ter ao menos 6 caracteres.' });
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) {
+      return res.status(400).json({ error: 'Link inválido.' });
     }
+    const passwordError = validatePassword(password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
 
     const tokenHash = hashResetToken(token);
     const row = await db.get(
@@ -421,7 +441,11 @@ router.post(
       });
     }
 
-    await db.run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(password), row.user_id);
+    await db.run(
+      'UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?',
+      hashPassword(password),
+      row.user_id
+    );
     await db.run('UPDATE password_resets SET consumed = 1 WHERE id = ?', row.id);
     // Invalida também qualquer outro link ainda ativo para o mesmo usuário.
     await db.run(
@@ -471,20 +495,30 @@ router.put(
     }
 
     let newHash = current.password_hash;
+    let newSessionVersion = Number(current.session_version || 0);
     if (password) {
-      if (password.length < 6) return res.status(400).json({ error: 'A nova senha deve ter ao menos 6 caracteres.' });
+      const passwordError = validatePassword(password);
+      if (passwordError) return res.status(400).json({ error: passwordError });
       newHash = hashPassword(password);
+      newSessionVersion += 1;
     }
 
     await db.run(
-      'UPDATE users SET name = ?, email = ?, password_hash = ? WHERE id = ?',
+      'UPDATE users SET name = ?, email = ?, password_hash = ?, session_version = ? WHERE id = ?',
       newName,
       newEmailRaw,
       newHash,
+      newSessionVersion,
       current.id
     );
 
-    const user = { id: current.id, name: newName, email: newEmailRaw, account_id: current.account_id };
+    const user = {
+      id: current.id,
+      name: newName,
+      email: newEmailRaw,
+      account_id: current.account_id,
+      session_version: newSessionVersion,
+    };
     const token = signToken(user);
     setAuthCookie(res, token);
 
@@ -518,10 +552,10 @@ router.post(
   ah(async (req, res) => {
     const { name, email, password } = req.body || {};
 
-    if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome.' });
-    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
-    if (!password || password.length < 6)
-      return res.status(400).json({ error: 'A senha deve ter ao menos 6 caracteres.' });
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Informe o nome.' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+    const passwordError = validatePassword(password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
 
     const normalizedEmail = email.toLowerCase();
     const existing = await db.get('SELECT id FROM users WHERE email = ?', normalizedEmail);
@@ -531,7 +565,7 @@ router.post(
       `INSERT INTO users (name, email, password_hash, role, email_verified, account_id)
        VALUES (?, ?, ?, ?, 1, ?)
        RETURNING id, name, email, created_at`,
-      name.trim(),
+      name.trim().slice(0, 200),
       normalizedEmail,
       hashPassword(password),
       'admin',

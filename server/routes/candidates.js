@@ -4,8 +4,10 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
+const { rateLimit } = require('../rate-limit');
 
 const router = express.Router();
+const limitCandidateCreation = rateLimit({ name: 'candidate-create', max: 5, windowMinutes: 60 });
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -70,6 +72,7 @@ router.use((req, res, next) => {
 // ---------------- Rota pública ----------------
 router.post(
   '/',
+  limitCandidateCreation,
   ah(async (req, res) => {
     const origin = req.get('origin');
     if (origin && !allowedOrigins().has(origin)) {

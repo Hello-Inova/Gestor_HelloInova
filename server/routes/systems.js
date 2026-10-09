@@ -3,6 +3,7 @@ const db = require('../db');
 const { requireAuth } = require('../auth');
 const { encrypt, decrypt } = require('../crypto');
 const { SYSTEM_CATEGORIES } = require('../categories');
+const { normalizeHttpUrl, isAllowedImageDataUrl } = require('../security');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -97,14 +98,14 @@ function validLogo(logo) {
   if (!logo) return true;
   if (typeof logo !== 'string') return false;
   if (logo.length > MAX_LOGO_LENGTH) return false;
-  return /^data:image\//.test(logo);
+  return isAllowedImageDataUrl(logo);
 }
 
 function validContractFile(file) {
   if (!file) return true;
   if (typeof file !== 'string') return false;
   if (file.length > MAX_CONTRACT_LENGTH) return false;
-  return /^data:(application\/pdf|image\/)/.test(file);
+  return /^data:application\/pdf;base64,/i.test(file) || isAllowedImageDataUrl(file);
 }
 
 // Normaliza e valida a lista de anexos da "Documentação Sistêmica" (só
@@ -143,8 +144,10 @@ function parseLinks(input) {
   for (const item of input) {
     if (!item || typeof item !== 'object') return { ok: false, error: 'Link inválido.' };
     const name = (typeof item.name === 'string' ? item.name : '').trim().slice(0, 120);
-    const url = (typeof item.url === 'string' ? item.url : '').trim().slice(0, 500);
-    if (!name && !url) continue; // ignora linhas totalmente vazias
+    const rawUrl = (typeof item.url === 'string' ? item.url : '').trim();
+    if (!name && !rawUrl) continue; // ignora linhas totalmente vazias
+    const url = normalizeHttpUrl(rawUrl);
+    if (!url) return { ok: false, error: 'Cada link adicional deve ter uma URL HTTP ou HTTPS válida.' };
     links.push({ name, url });
   }
   return { ok: true, links };
@@ -341,8 +344,14 @@ router.post(
       contract_file = '', contract_file_name = '',
       documentation_files, links, specifications = '', is_public = false, niche = '',
     } = req.body || {};
-    if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
-    if (!url || !url.trim()) return res.status(400).json({ error: 'Informe o link de acesso.' });
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Informe o nome do sistema.' });
+    if (typeof login_email !== 'string' || typeof login_password !== 'string' || login_password.length > 500) {
+      return res.status(400).json({ error: 'Credenciais do sistema inválidas.' });
+    }
+    const safeUrl = normalizeHttpUrl(url, { required: true });
+    const safeRepoUrl = normalizeHttpUrl(repo_url);
+    if (!safeUrl) return res.status(400).json({ error: 'Informe um link de acesso HTTP ou HTTPS válido.' });
+    if (repo_url && !safeRepoUrl) return res.status(400).json({ error: 'Informe um link de repositório válido.' });
     if (!validLogo(logo)) return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
     if (!validContractFile(contract_file)) {
       return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
@@ -369,7 +378,7 @@ router.post(
          specifications, is_public, niche)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        RETURNING *`,
-      req.user.account_id, name.trim(), url.trim(), (repo_url || '').trim(), login_email.trim(), encrypt(login_password), logo,
+      req.user.account_id, name.trim().slice(0, 200), safeUrl, safeRepoUrl, login_email.trim().slice(0, 320), encrypt(login_password), logo,
       JSON.stringify(cat.categories || []), JSON.stringify(subs.subscriptions || []),
       contact.contact_name, contact.contact_whatsapp, contact.contact_email,
       contract_file || '', (contract_file_name || '').trim().slice(0, 200),
@@ -395,6 +404,10 @@ router.put(
       contract_file, contract_file_name,
       documentation_files, links, specifications, is_public, niche,
     } = req.body || {};
+    if ((login_email !== undefined && typeof login_email !== 'string') ||
+        (login_password !== undefined && (typeof login_password !== 'string' || login_password.length > 500))) {
+      return res.status(400).json({ error: 'Credenciais do sistema inválidas.' });
+    }
     if (logo !== undefined && !validLogo(logo)) {
       return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
     }
@@ -419,9 +432,11 @@ router.put(
     const linksResult = parseLinks(links);
     if (!linksResult.ok) return res.status(400).json({ error: linksResult.error });
 
-    const newName = typeof name === 'string' && name.trim() ? name.trim() : row.name;
-    const newUrl = typeof url === 'string' && url.trim() ? url.trim() : row.url;
-    const newRepoUrl = typeof repo_url === 'string' ? repo_url.trim() : row.repo_url;
+    const newName = typeof name === 'string' && name.trim() ? name.trim().slice(0, 200) : row.name;
+    const newUrl = url === undefined ? row.url : normalizeHttpUrl(url, { required: true });
+    const newRepoUrl = repo_url === undefined ? row.repo_url : normalizeHttpUrl(repo_url);
+    if (!newUrl) return res.status(400).json({ error: 'Informe um link de acesso HTTP ou HTTPS válido.' });
+    if (repo_url && !newRepoUrl) return res.status(400).json({ error: 'Informe um link de repositório válido.' });
     const newEmail = typeof login_email === 'string' ? login_email.trim() : row.login_email;
     const newPassEnc =
       typeof login_password === 'string' && login_password !== '' ? encrypt(login_password) : row.login_password_enc;

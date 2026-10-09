@@ -6,8 +6,10 @@
 // dentro do Gestor). Por isso "requireAuth" é aplicado rota a rota, e não no
 // router inteiro como acontece em pages.js/systems.js/dashboard.js.
 const express = require('express');
+const crypto = require('node:crypto');
 const db = require('../db');
 const { requireAuth } = require('../auth');
+const { rateLimit } = require('../rate-limit');
 
 const router = express.Router();
 
@@ -19,6 +21,12 @@ const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_STATUSES = ['novo', 'em_contato', 'convertido', 'perdido'];
 const VALID_SERVICES = ['Landing Page', 'Website', 'Cardápio Digital', 'E-mail Corporativo', 'Outro'];
+const limitLeadCreation = rateLimit({ name: 'lead-create', max: 10, windowMinutes: 60 });
+const limitLeadCompletion = rateLimit({ name: 'lead-complete', max: 20, windowMinutes: 60 });
+
+function hashPublicToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 // Classifica a origem do lead a partir do referrer (document.referrer,
 // capturado no navegador de quem preencheu o formulário). Não é possível
@@ -66,27 +74,32 @@ function serializeLead(row) {
 // imediatamente, mesmo que a pessoa abandone antes da etapa 2.
 router.post(
   '/',
+  limitLeadCreation,
   ah(async (req, res) => {
     const { name, whatsapp, email, referrer_url } = req.body || {};
 
-    if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome completo.' });
-    if (!whatsapp || !whatsapp.trim()) return res.status(400).json({ error: 'Informe o WhatsApp.' });
-    if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Informe o nome completo.' });
+    if (typeof whatsapp !== 'string' || !whatsapp.trim()) return res.status(400).json({ error: 'Informe o WhatsApp.' });
+    if (typeof email !== 'string' || email.length > 320 || !EMAIL_RE.test(email)) {
+      return res.status(400).json({ error: 'E-mail inválido.' });
+    }
 
     const referrerUrl = typeof referrer_url === 'string' ? referrer_url.slice(0, 2000) : '';
     const source = classifySource(referrerUrl);
 
+    const updateToken = crypto.randomBytes(32).toString('hex');
     const inserted = await db.run(
-      `INSERT INTO leads (name, whatsapp, email, referrer_url, source, step_completed)
-       VALUES (?, ?, ?, ?, ?, 1) RETURNING id`,
-      name.trim(),
-      whatsapp.trim(),
+      `INSERT INTO leads (name, whatsapp, email, referrer_url, source, step_completed, public_token_hash)
+       VALUES (?, ?, ?, ?, ?, 1, ?) RETURNING id`,
+      name.trim().slice(0, 200),
+      whatsapp.trim().slice(0, 40),
       email.trim().toLowerCase(),
       referrerUrl,
-      source
+      source,
+      hashPublicToken(updateToken)
     );
 
-    res.status(201).json({ id: inserted.rows[0].id });
+    res.status(201).json({ id: inserted.rows[0].id, update_token: updateToken });
   })
 );
 
@@ -95,8 +108,17 @@ router.post(
 // nunca permite alterar "status" ou outros campos administrativos.
 router.patch(
   '/:id/step2',
+  limitLeadCompletion,
   ah(async (req, res) => {
-    const lead = await db.get('SELECT id FROM leads WHERE id = ?', req.params.id);
+    const updateToken = req.body && req.body.update_token;
+    if (typeof updateToken !== 'string' || !/^[a-f0-9]{64}$/.test(updateToken)) {
+      return res.status(404).json({ error: 'Lead não encontrado.' });
+    }
+    const lead = await db.get(
+      'SELECT id FROM leads WHERE id = ? AND public_token_hash = ?',
+      req.params.id,
+      hashPublicToken(updateToken)
+    );
     if (!lead) return res.status(404).json({ error: 'Lead não encontrado.' });
 
     const { services, business_segment, business_segment_other, description } = req.body || {};

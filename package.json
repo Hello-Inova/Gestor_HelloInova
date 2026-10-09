@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node --no-warnings server/index.js",
     "dev": "node --no-warnings --watch server/index.js",
+    "test": "node --test --test-isolation=none",
     "build:webgl": "esbuild scripts/public-sites-3d.entry.js --bundle --format=iife --minify --outfile=public/public-sites-3d.js"
   },
   "engines": {

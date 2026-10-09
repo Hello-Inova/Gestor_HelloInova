@@ -84,6 +84,7 @@ const SCHEMA_SQL = `
     public_slug TEXT,
     email_verified INTEGER NOT NULL DEFAULT 0,
     account_id INTEGER,
+    session_version INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
@@ -157,6 +158,7 @@ const SCHEMA_SQL = `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS candidates_seeded INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS public_sites_seeded INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS public_slug TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
   UPDATE users
      SET public_slug = md5(random()::text || clock_timestamp()::text || id::text)
    WHERE public_slug IS NULL OR public_slug = '';
@@ -193,6 +195,8 @@ const SCHEMA_SQL = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  ALTER TABLE leads ADD COLUMN IF NOT EXISTS public_token_hash TEXT;
+  CREATE INDEX IF NOT EXISTS leads_public_token_hash_idx ON leads(public_token_hash);
 
   -- Candidatos à vaga de SDR recebidos pelo formulário público externo.
   -- Mantemos os dados de recrutamento separados dos leads comerciais para
@@ -233,6 +237,15 @@ const SCHEMA_SQL = `
     ip TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+
+  CREATE TABLE IF NOT EXISTS request_rate_limits (
+    id BIGSERIAL PRIMARY KEY,
+    route TEXT NOT NULL,
+    client_key TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS request_rate_limits_lookup_idx
+    ON request_rate_limits(route, client_key, created_at);
 
   -- Tokens de recuperação de senha ("esqueci minha senha"), enviados por
   -- e-mail como link. Guardamos só o hash do token (nunca o valor em texto
