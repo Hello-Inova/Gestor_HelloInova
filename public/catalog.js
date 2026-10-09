@@ -9,6 +9,10 @@
   const slug = window.location.pathname.split('/').filter(Boolean).pop() || '';
   let products = [];
   let activeCategory = '';
+  let lightbox = null;
+  let lightboxImages = [];
+  let lightboxIndex = 0;
+  let lightboxZoom = 1;
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -50,6 +54,19 @@
       if (product.images.length > 1) imageWrap.appendChild(node('span', 'catalog-card-image-count', product.images.length + ' imagens'));
     } else {
       imageWrap.appendChild(node('span', 'catalog-card-fallback', (product.name || '?').charAt(0).toUpperCase()));
+    }
+    if (product.images && product.images.length) {
+      imageWrap.classList.add('expandable');
+      imageWrap.tabIndex = 0;
+      imageWrap.setAttribute('role', 'button');
+      imageWrap.setAttribute('aria-label', 'Ampliar imagens de ' + product.name);
+      imageWrap.addEventListener('click', () => openImageLightbox(product.images, 0, product.name));
+      imageWrap.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openImageLightbox(product.images, 0, product.name);
+        }
+      });
     }
     const body = node('div', 'catalog-card-body');
     body.appendChild(node('span', 'catalog-card-category', product.category || 'Solução digital'));
@@ -94,10 +111,24 @@
     const gallery = node('div', 'dialog-gallery');
     const main = node('div', 'dialog-main-image');
     const images = product.images || [];
+    let selectedImageIndex = 0;
     const mainImage = document.createElement('img');
     if (images.length) {
       mainImage.src = images[0];
       mainImage.alt = product.name;
+      mainImage.title = 'Clique para ampliar';
+      main.classList.add('expandable');
+      main.tabIndex = 0;
+      main.setAttribute('role', 'button');
+      main.setAttribute('aria-label', 'Ampliar imagem de ' + product.name);
+      const expandSelected = () => openImageLightbox(images, selectedImageIndex, product.name);
+      main.addEventListener('click', expandSelected);
+      main.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          expandSelected();
+        }
+      });
       main.appendChild(mainImage);
     } else {
       main.appendChild(node('span', 'catalog-card-fallback', (product.name || '?').charAt(0).toUpperCase()));
@@ -113,6 +144,7 @@
         image.alt = 'Imagem ' + (index + 1);
         thumb.appendChild(image);
         thumb.addEventListener('click', () => {
+          selectedImageIndex = index;
           mainImage.src = imageUrl;
           thumbs.querySelectorAll('.dialog-thumb').forEach((item) => item.classList.remove('active'));
           thumb.classList.add('active');
@@ -146,8 +178,107 @@
     document.body.style.overflow = '';
   }
 
+  function ensureImageLightbox() {
+    if (lightbox) return lightbox;
+    const overlay = node('div', 'image-lightbox');
+    overlay.hidden = true;
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Visualização ampliada da imagem');
+
+    const stage = node('div', 'image-lightbox-stage');
+    const image = document.createElement('img');
+    image.alt = '';
+    stage.appendChild(image);
+    stage.addEventListener('click', (event) => { if (event.target === stage) closeImageLightbox(); });
+
+    const close = node('button', 'image-lightbox-close', '×');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Fechar imagem');
+    close.addEventListener('click', closeImageLightbox);
+
+    const previous = node('button', 'image-lightbox-nav previous', '‹');
+    previous.type = 'button';
+    previous.setAttribute('aria-label', 'Imagem anterior');
+    previous.addEventListener('click', () => showLightboxImage(lightboxIndex - 1));
+
+    const next = node('button', 'image-lightbox-nav next', '›');
+    next.type = 'button';
+    next.setAttribute('aria-label', 'Próxima imagem');
+    next.addEventListener('click', () => showLightboxImage(lightboxIndex + 1));
+
+    const toolbar = node('div', 'image-lightbox-toolbar');
+    const zoomOut = node('button', '', '−');
+    zoomOut.type = 'button';
+    zoomOut.setAttribute('aria-label', 'Diminuir zoom');
+    zoomOut.addEventListener('click', () => setLightboxZoom(lightboxZoom - .25));
+    const reset = node('button', '', '100%');
+    reset.type = 'button';
+    reset.className = 'image-lightbox-zoom-label';
+    reset.setAttribute('aria-label', 'Restaurar zoom');
+    reset.addEventListener('click', () => setLightboxZoom(1));
+    const zoomIn = node('button', '', '+');
+    zoomIn.type = 'button';
+    zoomIn.setAttribute('aria-label', 'Aumentar zoom');
+    zoomIn.addEventListener('click', () => setLightboxZoom(lightboxZoom + .25));
+    const counter = node('span', 'image-lightbox-counter', '');
+    toolbar.append(zoomOut, reset, zoomIn, counter);
+
+    overlay.append(stage, close, previous, next, toolbar);
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) closeImageLightbox(); });
+    document.body.appendChild(overlay);
+    lightbox = { overlay, stage, image, close, previous, next, reset, counter };
+    return lightbox;
+  }
+
+  function openImageLightbox(images, index, productName) {
+    if (!Array.isArray(images) || !images.length) return;
+    const viewer = ensureImageLightbox();
+    lightboxImages = images;
+    lightboxIndex = Math.max(0, Math.min(index || 0, images.length - 1));
+    viewer.image.alt = productName || 'Imagem da solução';
+    viewer.overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    showLightboxImage(lightboxIndex);
+    viewer.close.focus();
+  }
+
+  function showLightboxImage(index) {
+    if (!lightbox || !lightboxImages.length) return;
+    lightboxIndex = (index + lightboxImages.length) % lightboxImages.length;
+    lightbox.image.src = lightboxImages[lightboxIndex];
+    lightbox.counter.textContent = (lightboxIndex + 1) + ' / ' + lightboxImages.length;
+    lightbox.previous.hidden = lightboxImages.length < 2;
+    lightbox.next.hidden = lightboxImages.length < 2;
+    setLightboxZoom(1);
+  }
+
+  function setLightboxZoom(value) {
+    if (!lightbox) return;
+    lightboxZoom = Math.max(.5, Math.min(value, 3));
+    lightbox.image.style.transform = 'scale(' + lightboxZoom + ')';
+    lightbox.reset.textContent = Math.round(lightboxZoom * 100) + '%';
+    lightbox.stage.classList.toggle('zoomed', lightboxZoom > 1);
+  }
+
+  function closeImageLightbox() {
+    if (!lightbox) return;
+    lightbox.overlay.hidden = true;
+    lightbox.image.removeAttribute('src');
+    lightboxImages = [];
+    if (dialog.hidden) document.body.style.overflow = '';
+  }
+
   dialog.addEventListener('click', (event) => { if (event.target === dialog) closeProduct(); });
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !dialog.hidden) closeProduct(); });
+  document.addEventListener('keydown', (event) => {
+    if (lightbox && !lightbox.overlay.hidden) {
+      if (event.key === 'Escape') closeImageLightbox();
+      if (event.key === 'ArrowLeft' && lightboxImages.length > 1) showLightboxImage(lightboxIndex - 1);
+      if (event.key === 'ArrowRight' && lightboxImages.length > 1) showLightboxImage(lightboxIndex + 1);
+      return;
+    }
+    if (event.key === 'Escape' && !dialog.hidden) closeProduct();
+  });
   search.addEventListener('input', renderProducts);
 
   fetch('/api/public-catalog/' + encodeURIComponent(slug), { credentials: 'omit' })

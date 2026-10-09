@@ -97,6 +97,10 @@ a { color: inherit; }
 .catalog-card:hover { transform: translateY(-6px); border-color: rgba(77,137,255,.5); box-shadow: 0 28px 64px rgba(0,0,0,.34); }
 .catalog-card-image { position: relative; height: 230px; overflow: hidden; background: radial-gradient(circle at 50% 30%, rgba(45,116,255,.26), transparent 68%), #07101f; }
 .catalog-card-image img { width: 100%; height: 100%; object-fit: cover; transition: transform .45s ease; }
+.catalog-card-image.expandable,
+.dialog-main-image.expandable { cursor: zoom-in; }
+.catalog-card-image.expandable:focus-visible,
+.dialog-main-image.expandable:focus-visible { outline: 2px solid var(--blue-light); outline-offset: -3px; }
 .catalog-card:hover .catalog-card-image img { transform: scale(1.035); }
 .catalog-card-fallback { display: grid; width: 100%; height: 100%; place-items: center; font: 800 64px var(--display); color: var(--blue-light); }
 .catalog-card-image-count { position: absolute; right: 12px; bottom: 12px; padding: 6px 9px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(2,6,14,.8); font-size: 10px; font-weight: 700; backdrop-filter: blur(8px); }
@@ -134,6 +138,54 @@ a { color: inherit; }
 .dialog-price small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 500; }
 .dialog-cta { margin-top: 22px; padding: 14px 18px; border-radius: 12px; background: var(--blue); color: #fff; font-size: 13px; font-weight: 800; text-align: center; text-decoration: none; }
 .dialog-close { position: absolute; z-index: 2; top: 14px; right: 14px; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid rgba(255,255,255,.16); border-radius: 50%; background: rgba(2,6,14,.82); color: #fff; cursor: pointer; font-size: 22px; }
+.image-lightbox {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 68px 80px 84px;
+  background: rgba(0, 2, 7, .96);
+  backdrop-filter: blur(18px);
+}
+.image-lightbox[hidden] { display: none; }
+.image-lightbox-stage {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.image-lightbox-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center;
+  transition: transform .18s ease;
+  user-select: none;
+}
+.image-lightbox-stage.zoomed { cursor: move; }
+.image-lightbox-close,
+.image-lightbox-nav,
+.image-lightbox-toolbar button {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(11,18,32,.86);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+.image-lightbox-close { position: absolute; top: 18px; right: 20px; width: 44px; height: 44px; border-radius: 50%; font-size: 27px; }
+.image-lightbox-nav { position: absolute; top: 50%; width: 48px; height: 64px; border-radius: 14px; transform: translateY(-50%); font-size: 38px; }
+.image-lightbox-nav.previous { left: 18px; }
+.image-lightbox-nav.next { right: 18px; }
+.image-lightbox-toolbar { position: absolute; bottom: 20px; left: 50%; display: flex; align-items: center; gap: 7px; padding: 7px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; background: rgba(7,12,23,.82); transform: translateX(-50%); backdrop-filter: blur(12px); }
+.image-lightbox-toolbar button { width: 34px; height: 32px; border-radius: 8px; font: 700 17px var(--body); }
+.image-lightbox-toolbar .image-lightbox-zoom-label { width: 58px; font-size: 10px; }
+.image-lightbox-counter { min-width: 45px; padding: 0 5px; color: var(--muted); font-size: 11px; text-align: center; }
 @media (max-width: 980px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .catalog-hero { grid-template-columns: 1fr; } .catalog-hero-panel { display: none; } .catalog-footer { flex-direction: column; } }
 @media (max-width: 680px) {
   .catalog-nav { height: 66px; padding: 0 18px; }
@@ -153,5 +205,10 @@ a { color: inherit; }
   .dialog-gallery { min-height: auto; }
   .dialog-main-image { height: 310px; }
   .dialog-content { padding: 28px 22px 34px; }
+  .image-lightbox { padding: 64px 10px 82px; }
+  .image-lightbox-nav { top: auto; bottom: 17px; width: 42px; height: 42px; border-radius: 11px; transform: none; font-size: 29px; }
+  .image-lightbox-nav.previous { left: 12px; }
+  .image-lightbox-nav.next { right: 12px; }
+  .image-lightbox-toolbar { bottom: 17px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
