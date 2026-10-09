@@ -41,6 +41,28 @@
     candidateModal: null,
   };
 
+  let deferredInstallPrompt = null;
+  let pwaInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    if (state.booted) render();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    pwaInstalled = true;
+    if (state.booted) render();
+    toast('Gestor instalado com sucesso.');
+  });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    });
+  }
+
   // Se a página foi aberta a partir do link de recuperação de senha
   // (?reset_token=...), guarda o token e limpa a URL — assim ele não fica
   // visível na barra de endereço nem reaparece se a página for atualizada.
@@ -178,6 +200,20 @@
     t.className = 'toast show' + (isError ? ' error' : '');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  async function promptPwaInstall() {
+    if (!deferredInstallPrompt) {
+      toast('No Chrome, abra o menu e escolha “Instalar aplicativo”.');
+      return;
+    }
+    const promptEvent = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    await promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    if (choice.outcome === 'accepted') toast('Instalação iniciada.');
+    else toast('Instalação cancelada.');
+    render();
   }
 
   function formatCurrencyBRL(value) {
@@ -448,6 +484,15 @@
 
     submitBtn = el('button', { type: 'submit', class: 'btn btn-primary btn-block' }, ['Entrar']);
     form.appendChild(submitBtn);
+
+    if (deferredInstallPrompt && !pwaInstalled) {
+      form.appendChild(el('button', {
+        type: 'button',
+        class: 'btn btn-ghost btn-block auth-install-btn',
+        onclick: promptPwaInstall,
+        html: icon('download') + '<span>Instalar aplicativo</span>',
+      }));
+    }
 
     const card = el('div', { class: 'auth-card auth-anim' }, [
       el('h1', {}, ['Acesse sua conta']),
@@ -772,6 +817,13 @@
           el('div', { class: 'u-email' }, [state.user.email]),
         ]),
       ]),
+      ...(deferredInstallPrompt && !pwaInstalled ? [el('button', {
+        class: 'btn btn-ghost btn-icon pwa-install-btn',
+        title: 'Instalar aplicativo',
+        'aria-label': 'Instalar aplicativo',
+        onclick: promptPwaInstall,
+        html: icon('download'),
+      })] : []),
       el('button', {
         class: 'btn btn-ghost btn-icon',
         title: 'Sair',

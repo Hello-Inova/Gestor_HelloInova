@@ -144,6 +144,10 @@ body {
 .hero-projects { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 18px; color: #d7e3f8; border: 1px solid rgba(96,140,255,.3); border-radius: 10px; background: rgba(12,16,27,.46); text-decoration: none; font-size: 14px; font-weight: 600; backdrop-filter: blur(12px); transition: border-color .2s, background .2s; }
 .hero-projects:hover { border-color: rgba(110,175,255,.6); background: rgba(47,123,255,.1); }
 .public-main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 54px 0 90px; }
+.public-section-heading { max-width: 760px; margin-bottom: 36px; }
+.public-section-heading > span { color: var(--blue-light); font-size: 11px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; }
+.public-section-heading h2 { margin: 10px 0 12px; color: #f5f8ff; font: 700 clamp(28px, 4vw, 44px)/1.12 Poppins, sans-serif; letter-spacing: -1.5px; }
+.public-section-heading p { max-width: 650px; margin: 0; color: #929fba; font-size: 15px; line-height: 1.7; }
 .public-controls { display: flex; flex-direction: column; gap: 18px; }
 .public-search { position: relative; display: block; }
 .public-search span { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 24px; }
@@ -316,6 +320,9 @@ body {
   .public-hero-actions { margin-top: 26px; }
   .hero-contact, .hero-projects { flex: 1 1 145px; }
   .public-main { width: 100%; padding: 28px 20px 54px; overflow: hidden; }
+  .public-section-heading { margin-bottom: 28px; }
+  .public-section-heading h2 { font-size: 28px; letter-spacing: -.8px; }
+  .public-section-heading p { font-size: 13px; line-height: 1.6; }
   .public-filters {
     flex-wrap: nowrap;
     overflow-x: auto;
