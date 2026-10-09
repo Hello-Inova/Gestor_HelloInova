@@ -82,6 +82,7 @@ const SCHEMA_SQL = `
     leads_seeded INTEGER NOT NULL DEFAULT 0,
     candidates_seeded INTEGER NOT NULL DEFAULT 0,
     public_sites_seeded INTEGER NOT NULL DEFAULT 0,
+    catalog_seeded INTEGER NOT NULL DEFAULT 0,
     public_slug TEXT,
     email_verified INTEGER NOT NULL DEFAULT 0,
     account_id INTEGER,
@@ -158,6 +159,7 @@ const SCHEMA_SQL = `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS leads_seeded INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS candidates_seeded INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS public_sites_seeded INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS catalog_seeded INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS public_slug TEXT;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS module_permissions TEXT NOT NULL DEFAULT '[]';
@@ -199,6 +201,23 @@ const SCHEMA_SQL = `
   );
   ALTER TABLE leads ADD COLUMN IF NOT EXISTS public_token_hash TEXT;
   CREATE INDEX IF NOT EXISTS leads_public_token_hash_idx ON leads(public_token_hash);
+
+  CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    category TEXT DEFAULT '',
+    summary TEXT DEFAULT '',
+    details TEXT DEFAULT '',
+    observations TEXT DEFAULT '',
+    price NUMERIC(12,2),
+    price_details TEXT DEFAULT '',
+    images TEXT NOT NULL DEFAULT '[]',
+    is_public INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS products_user_id_idx ON products(user_id);
 
   -- Candidatos à vaga de SDR recebidos pelo formulário público externo.
   -- Mantemos os dados de recrutamento separados dos leads comerciais para

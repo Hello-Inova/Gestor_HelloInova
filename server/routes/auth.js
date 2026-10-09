@@ -269,7 +269,14 @@ router.post(
       5
     );
     await db.run(
-      'UPDATE users SET systems_seeded = 1, dashboard_seeded = 1, leads_seeded = 1, candidates_seeded = 1, public_sites_seeded = 1 WHERE id = ?',
+      'INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)',
+      userId,
+      'Catálogo de Produtos',
+      'catalog',
+      6
+    );
+    await db.run(
+      'UPDATE users SET systems_seeded = 1, dashboard_seeded = 1, leads_seeded = 1, candidates_seeded = 1, public_sites_seeded = 1, catalog_seeded = 1 WHERE id = ?',
       userId
     );
 

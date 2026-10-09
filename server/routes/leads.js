@@ -11,6 +11,12 @@ const db = require('../db');
 const { requireAuth } = require('../auth');
 const { rateLimit } = require('../rate-limit');
 const { requireAnyModule } = require('../permissions');
+const {
+  MAX_FILE_BYTES,
+  LeadImportError,
+  duplicateKey,
+  parseLeadWorkbook,
+} = require('../lead-import');
 
 const router = express.Router();
 
@@ -24,6 +30,7 @@ const VALID_STATUSES = ['novo', 'em_contato', 'convertido', 'perdido'];
 const VALID_SERVICES = ['Landing Page', 'Website', 'Cardápio Digital', 'E-mail Corporativo', 'Outro'];
 const limitLeadCreation = rateLimit({ name: 'lead-create', max: 10, windowMinutes: 60 });
 const limitLeadCompletion = rateLimit({ name: 'lead-complete', max: 20, windowMinutes: 60 });
+const limitLeadImport = rateLimit({ name: 'lead-import', max: 10, windowMinutes: 60 });
 
 function hashPublicToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -159,6 +166,105 @@ router.get(
   ah(async (req, res) => {
     const rows = await db.all('SELECT * FROM leads ORDER BY created_at DESC');
     res.json({ leads: rows.map(serializeLead) });
+  })
+);
+
+router.post(
+  '/import',
+  requireAuth,
+  requireAnyModule('leads'),
+  limitLeadImport,
+  ah(async (req, res) => {
+    const { file_name: fileName, file_data: fileData } = req.body || {};
+    if (typeof fileName !== 'string' || typeof fileData !== 'string') {
+      return res.status(400).json({ error: 'Selecione um arquivo Excel para importar.' });
+    }
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(fileData) || fileData.length > Math.ceil(MAX_FILE_BYTES * 4 / 3) + 8) {
+      return res.status(400).json({ error: 'O arquivo enviado é inválido ou excede 2,5 MB.' });
+    }
+
+    let parsed;
+    try {
+      parsed = parseLeadWorkbook(Buffer.from(fileData, 'base64'), fileName);
+    } catch (err) {
+      if (err instanceof LeadImportError) {
+        return res.status(400).json({ error: err.message, errors: err.details });
+      }
+      throw err;
+    }
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const emails = [...new Set(parsed.leads.map((lead) => lead.email))];
+      const existingResult = emails.length
+        ? await client.query('SELECT email, whatsapp FROM leads WHERE lower(email) = ANY($1::text[])', [emails])
+        : { rows: [] };
+      const existingKeys = new Set(existingResult.rows.map((lead) => duplicateKey(lead.email, lead.whatsapp)));
+      const fileKeys = new Set();
+      const uniqueLeads = [];
+      const duplicateErrors = [];
+
+      parsed.leads.forEach((lead) => {
+        const key = duplicateKey(lead.email, lead.whatsapp);
+        if (existingKeys.has(key) || fileKeys.has(key)) {
+          duplicateErrors.push({
+            row: lead.source_row,
+            email: lead.email,
+            message: 'Lead duplicado (mesmo e-mail e WhatsApp).',
+          });
+          return;
+        }
+        fileKeys.add(key);
+        uniqueLeads.push(lead);
+      });
+
+      let importedRows = [];
+      if (uniqueLeads.length) {
+        const params = [];
+        const valueGroups = uniqueLeads.map((lead, rowIndex) => {
+          const offset = rowIndex * 10;
+          params.push(
+            lead.name,
+            lead.whatsapp,
+            lead.email,
+            JSON.stringify(lead.services),
+            lead.business_segment,
+            lead.business_segment_other,
+            lead.description,
+            lead.source,
+            lead.step_completed,
+            lead.status
+          );
+          return `(${Array.from({ length: 10 }, (_, index) => `$${offset + index + 1}`).join(', ')})`;
+        });
+        const inserted = await client.query(
+          `INSERT INTO leads
+             (name, whatsapp, email, services, business_segment, business_segment_other,
+              description, source, step_completed, status)
+           VALUES ${valueGroups.join(', ')}
+           RETURNING *`,
+          params
+        );
+        importedRows = inserted.rows;
+      }
+
+      await client.query('COMMIT');
+      res.status(201).json({
+        imported_count: importedRows.length,
+        duplicate_count: duplicateErrors.length,
+        rejected_count: parsed.errors.length,
+        total_rows: parsed.totalRows,
+        sheet_name: parsed.sheetName,
+        errors: [...parsed.errors, ...duplicateErrors].slice(0, 50),
+        leads: importedRows.map(serializeLead),
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   })
 );
 

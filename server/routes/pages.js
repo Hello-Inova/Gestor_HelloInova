@@ -117,6 +117,28 @@ async function ensurePublicSitesModule(accountId) {
   await db.run('UPDATE users SET public_sites_seeded = 1 WHERE id = ?', accountId);
 }
 
+async function ensureCatalogModule(accountId) {
+  const user = await db.get('SELECT catalog_seeded FROM users WHERE id = ?', accountId);
+  if (!user || user.catalog_seeded) return;
+
+  const existing = await db.get(
+    "SELECT id FROM pages WHERE user_id = ? AND type = 'catalog'",
+    accountId
+  );
+  if (!existing) {
+    const maxOrderRow = await db.get(
+      'SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?',
+      accountId
+    );
+    await db.run(
+      "INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Catálogo de Produtos', 'catalog', ?)",
+      accountId,
+      Number(maxOrderRow.m) + 1
+    );
+  }
+  await db.run('UPDATE users SET catalog_seeded = 1 WHERE id = ?', accountId);
+}
+
 // Lista módulos da conta, com seus elementos
 router.get(
   '/',
@@ -125,6 +147,7 @@ router.get(
     await ensureLeadsModule(req.user.account_id);
     await ensureCandidatesModule(req.user.account_id);
     await ensurePublicSitesModule(req.user.account_id);
+    await ensureCatalogModule(req.user.account_id);
 
     const pages = await db.all(
       'SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC',
@@ -140,7 +163,7 @@ router.get(
     const result = await Promise.all(
       visiblePages.map(async (p) => ({
         ...p,
-        elements: ['systems', 'dashboard', 'users', 'leads', 'candidates', 'public_sites'].includes(p.type)
+        elements: ['systems', 'dashboard', 'users', 'leads', 'candidates', 'public_sites', 'catalog'].includes(p.type)
           ? []
           : await db.all('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC', p.id),
       }))

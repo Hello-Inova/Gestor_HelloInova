@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Catálogo de soluções | Hello Inova</title>
+  <meta name="description" content="Conheça as soluções oferecidas pela Hello Inova." />
+  <link rel="icon" type="image/png" href="/assets/logo-mark.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/catalog.css" />
+</head>
+<body>
+  <header class="catalog-nav">
+    <a class="catalog-brand" href="#inicio" aria-label="Hello Inova">
+      <img src="/assets/logo-mark.png" alt="" />
+      <span>Hello<strong>Inova</strong></span>
+    </a>
+    <nav aria-label="Navegação principal">
+      <a href="#solucoes">Soluções</a>
+      <a class="catalog-contact" href="/captacao">Falar com a Hello Inova <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="inicio" class="catalog-hero">
+      <div class="catalog-glow glow-one" aria-hidden="true"></div>
+      <div class="catalog-glow glow-two" aria-hidden="true"></div>
+      <div class="catalog-hero-content">
+        <span class="catalog-eyebrow">Catálogo de soluções</span>
+        <h1>Tecnologia pensada para o seu próximo passo.</h1>
+        <p>Conheça as soluções cadastradas pela Hello Inova e encontre a opção que combina com o seu projeto.</p>
+        <div class="catalog-hero-actions">
+          <a href="#solucoes">Explorar soluções <span aria-hidden="true">↓</span></a>
+          <a class="secondary" href="/captacao">Solicitar atendimento</a>
+        </div>
+      </div>
+      <div class="catalog-hero-panel" aria-hidden="true">
+        <div class="hero-panel-orbit"></div>
+        <img src="/assets/logo-mark.png" alt="" />
+      </div>
+    </section>
+
+    <section id="solucoes" class="catalog-section">
+      <div class="catalog-section-heading">
+        <span>Soluções Hello Inova</span>
+        <h2>Encontre a solução ideal.</h2>
+        <p>Pesquise pelo nome, categoria ou detalhes do produto.</p>
+      </div>
+      <div class="catalog-controls">
+        <label class="catalog-search">
+          <span aria-hidden="true">⌕</span>
+          <input id="catalog-search" type="search" placeholder="Pesquisar soluções…" autocomplete="off" />
+        </label>
+        <div id="catalog-filters" class="catalog-filters" aria-label="Categorias"></div>
+      </div>
+      <p id="catalog-count" class="catalog-count"></p>
+      <div id="catalog-grid" class="catalog-grid" aria-live="polite">
+        <div class="catalog-state">Carregando soluções…</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="catalog-footer">
+    <div class="footer-brand">
+      <img src="/assets/logo-mark.png" alt="" />
+      <div><strong>Hello Inova</strong><span>Soluções digitais para transformar ideias.</span></div>
+    </div>
+    <div class="footer-links">
+      <a href="https://wa.me/5511932049352" target="_blank" rel="noopener"><span aria-hidden="true">◉</span> (11) 9 3204-9352</a>
+      <a href="https://www.instagram.com/helloinova?obrf=YXI0bmc2dnN2amR0" target="_blank" rel="noopener"><span aria-hidden="true">◎</span> Instagram</a>
+      <a href="mailto:contato@helloinova.com.br"><span aria-hidden="true">✉</span> contato@helloinova.com.br</a>
+      <span><span aria-hidden="true">⌖</span> Rua dos Flox, 400, Portal dos Ipês, Cajamar - SP</span>
+    </div>
+  </footer>
+
+  <div id="product-dialog" class="product-dialog" hidden></div>
+  <script src="/catalog.js"></script>
+</body>
+</html>

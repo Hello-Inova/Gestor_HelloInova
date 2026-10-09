@@ -14,6 +14,8 @@ const dashboardRoutes = require('./routes/dashboard');
 const leadRoutes = require('./routes/leads');
 const candidateRoutes = require('./routes/candidates');
 const publicSiteRoutes = require('./routes/public-sites');
+const productRoutes = require('./routes/products');
+const publicCatalogRoutes = require('./routes/public-catalog');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,9 +44,16 @@ app.use('/api/auth', express.json({ limit: '64kb' }), authRoutes);
 app.use('/api/pages', express.json({ limit: '256kb' }), pageRoutes);
 app.use('/api/systems', express.json({ limit: '30mb' }), systemRoutes);
 app.use('/api/dashboard', express.json({ limit: '64kb' }), dashboardRoutes);
-app.use('/api/leads', express.json({ limit: '64kb' }), leadRoutes);
+const leadJson = express.json({ limit: '64kb' });
+const leadImportJson = express.json({ limit: '4mb' });
+app.use('/api/leads', (req, res, next) => {
+  const parser = req.path === '/import' ? leadImportJson : leadJson;
+  parser(req, res, next);
+}, leadRoutes);
 app.use('/api/candidates', express.json({ limit: '64kb' }), candidateRoutes);
 app.use('/api/public-sites', express.json({ limit: '64kb' }), publicSiteRoutes);
+app.use('/api/products', express.json({ limit: '5mb' }), productRoutes);
+app.use('/api/public-catalog', express.json({ limit: '64kb' }), publicCatalogRoutes);
 
 // Frontend estático — precisa estar em public/** na raiz do projeto (a
 // Vercel serve esse diretório direto pela CDN e ignora express.static() nas
@@ -72,6 +81,21 @@ app.get('/sites-publicos/:slug([a-f0-9]{32})', (req, res) => {
 
 app.get(['/sites-publicos', '/sites-publicos/*'], (req, res) => {
   res.status(404).type('text/plain').send('Página pública não encontrada.');
+});
+
+app.get('/catalogo/:slug([a-f0-9]{32})', (req, res) => {
+  res.set({
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+  });
+  res.sendFile(path.join(CLIENT_DIR, 'catalog.html'));
+});
+
+app.get(['/catalogo', '/catalogo/*'], (req, res) => {
+  res.status(404).type('text/plain').send('Catálogo não encontrado.');
 });
 
 // Qualquer rota não-API cai no SPA (index.html cuida do roteamento client-side)

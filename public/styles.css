@@ -1765,6 +1765,113 @@ button { font-family: inherit; }
 }
 
 /* ============================================================
+   Catálogo de Produtos
+   ============================================================ */
+.product-manager-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 16px;
+}
+.product-manager-empty { grid-column: 1 / -1; }
+.product-manager-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-0);
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.product-manager-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(47, 123, 255, .45);
+  box-shadow: 0 20px 38px rgba(0, 0, 0, .22);
+}
+.product-manager-image {
+  position: relative;
+  display: grid;
+  height: 170px;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 20%, rgba(47,123,255,.2), transparent 65%), var(--panel-2);
+}
+.product-manager-image img { width: 100%; height: 100%; object-fit: cover; }
+.product-manager-fallback { color: var(--blue-400); opacity: .75; }
+.product-manager-fallback svg { width: 38px; height: 38px; }
+.product-image-count {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 999px;
+  background: rgba(4,8,18,.78);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  backdrop-filter: blur(8px);
+}
+.product-manager-content { display: flex; min-height: 190px; flex: 1; flex-direction: column; padding: 18px; }
+.product-manager-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.product-manager-meta .status-public { color: var(--success); border-color: rgba(47,224,160,.3); background: rgba(47,224,160,.1); }
+.product-manager-content h3 { margin: 14px 0 7px; color: var(--text-0); font-family: var(--font-display); font-size: 17px; }
+.product-manager-content p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.product-manager-price { display: flex; flex-direction: column; gap: 2px; margin-top: auto; padding-top: 16px; color: var(--blue-400); font-size: 16px; font-weight: 800; }
+.product-manager-price small { color: var(--text-2); font-size: 10.5px; font-weight: 500; }
+.product-manager-actions { display: flex; justify-content: space-between; gap: 8px; padding: 0 18px 18px; }
+.product-modal-card { max-width: 800px; }
+.product-modal-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
+.product-modal-body .field-span-2 { grid-column: 1 / -1; }
+.product-image-editor-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.product-image-editor-item { position: relative; aspect-ratio: 1; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+.product-image-editor-item img { width: 100%; height: 100%; object-fit: cover; }
+.product-image-editor-item button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 50%;
+  background: rgba(7,10,18,.82);
+  color: #fff;
+  cursor: pointer;
+}
+.product-image-editor-empty {
+  display: flex;
+  grid-column: 1 / -1;
+  min-height: 90px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: 12px;
+}
+.product-modal-body input[type="file"] { width: 100%; color: var(--text-2); font-size: 12px; }
+
+@media (max-width: 680px) {
+  .product-manager-grid { grid-template-columns: 1fr; }
+  .product-modal-body { grid-template-columns: 1fr; }
+  .product-modal-body .field-span-2 { grid-column: auto; }
+  .product-image-editor-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ============================================================
    Módulo Leads
    ============================================================ */
 .view-description {
@@ -1783,6 +1890,73 @@ button { font-family: inherit; }
 .lead-status-badge.status-em_contato { background: rgba(255, 191, 71, 0.14); color: #ffbf47; border-color: rgba(255, 191, 71, 0.35); }
 .lead-status-badge.status-convertido { background: rgba(47, 224, 160, 0.14); color: var(--success); border-color: rgba(47, 224, 160, 0.35); }
 .lead-status-badge.status-perdido { background: rgba(255, 84, 112, 0.12); color: var(--danger); border-color: rgba(255, 84, 112, 0.3); }
+
+.lead-import-card { max-width: 640px; }
+.lead-import-hint { align-items: flex-start; margin-bottom: 18px; }
+.lead-import-hint p { margin: 5px 0 0; line-height: 1.5; }
+.lead-import-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(47, 123, 255, 0.035);
+  cursor: pointer;
+}
+.lead-import-picker input { display: none; }
+.lead-import-file-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lead-import-limit { margin-top: 9px; }
+.lead-import-error { margin-top: 16px; }
+.lead-import-inline-errors,
+.lead-import-errors ul {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.lead-import-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.lead-import-stat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.lead-import-stat strong { font-family: var(--font-display); font-size: 24px; }
+.lead-import-stat span { color: var(--text-2); font-size: 12px; }
+.lead-import-stat.success strong { color: var(--success); }
+.lead-import-stat.warning strong { color: #ffbf47; }
+.lead-import-stat.danger strong { color: var(--danger); }
+.lead-import-errors {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 84, 112, 0.25);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 84, 112, 0.06);
+}
+.lead-import-errors strong { color: var(--danger); font-size: 13px; }
+
+@media (max-width: 560px) {
+  .lead-import-picker { align-items: stretch; flex-direction: column; }
+  .lead-import-picker .btn { justify-content: center; }
+  .lead-import-summary { grid-template-columns: 1fr; }
+}
 
 /* ============================================================
    Módulo Candidatos

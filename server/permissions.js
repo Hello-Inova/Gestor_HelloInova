@@ -4,6 +4,7 @@ const MODULE_CATALOG = Object.freeze([
   { id: 'public_sites', label: 'Sites públicos' },
   { id: 'leads', label: 'Leads' },
   { id: 'candidates', label: 'Candidatos' },
+  { id: 'catalog', label: 'Catálogo de Produtos' },
 ]);
 const MODULE_IDS = new Set(MODULE_CATALOG.map((module) => module.id));
 const VALID_ROLES = new Set(['admin', 'vendas']);

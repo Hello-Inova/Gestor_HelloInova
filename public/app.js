@@ -35,10 +35,16 @@
     leadsSearch: '',
     leadsFilterStatus: [],
     leadModal: null, // lead sendo visualizado no pop-up de detalhes
+    leadImportModal: null, // arquivo/resultado da importação em massa
     candidates: null, // candidaturas recebidas pelo formulário público de SDR
     candidatesSearch: '',
     candidatesFilterStatus: [],
     candidateModal: null,
+    products: null,
+    productOptions: { public_url: '' },
+    productSearch: '',
+    productCategory: '',
+    productModal: null,
   };
 
   let deferredInstallPrompt = null;
@@ -82,6 +88,7 @@
     { id: 'public_sites', label: 'Sites públicos' },
     { id: 'leads', label: 'Leads' },
     { id: 'candidates', label: 'Candidatos' },
+    { id: 'catalog', label: 'Catálogo de Produtos' },
   ];
 
   function isAdministrator() {
@@ -111,6 +118,7 @@
       state.user = null;
       state.pages = [];
       state.systems = null;
+      state.products = null;
       state.selectedPageId = null;
       state.selectedElementId = null;
       toast(data.error || 'Sessão expirada. Faça login novamente.', true);
@@ -265,7 +273,7 @@
     try {
       const { user } = await api('/auth/me');
       state.user = user;
-      await Promise.all([loadPages(), loadSystems(), loadSystemOptions()]);
+      await Promise.all([loadPages(), loadSystems(), loadSystemOptions(), loadProducts(), loadProductOptions()]);
     } catch (e) {
       state.user = null;
     }
@@ -297,6 +305,25 @@
       state.systemOptions = await api('/systems/options');
     } catch (err) {
       state.systemOptions = { categories: DEFAULT_SYSTEM_CATEGORIES.slice(), niches: [], public_url: '' };
+    }
+  }
+
+  async function loadProducts() {
+    try {
+      if (!canAccessModule('catalog')) { state.products = []; return; }
+      const { products } = await api('/products');
+      state.products = products;
+    } catch (err) {
+      state.products = state.products || [];
+    }
+  }
+
+  async function loadProductOptions() {
+    try {
+      if (!canAccessModule('catalog')) return;
+      state.productOptions = await api('/products/options');
+    } catch (err) {
+      state.productOptions = { public_url: '' };
     }
   }
 
@@ -397,7 +424,9 @@
       if (state.viewModal) $app.appendChild(buildViewModal());
       if (state.userModal) $app.appendChild(buildUserModal());
       if (state.leadModal) $app.appendChild(buildLeadModal());
+      if (state.leadImportModal) $app.appendChild(buildLeadImportModal());
       if (state.candidateModal) $app.appendChild(buildCandidateModal());
+      if (state.productModal) $app.appendChild(buildProductModal());
     }
     // Estes dois pop-ups funcionam por cima de qualquer tela (mesmo
     // deslogado), já que o objetivo é justamente recuperar o acesso.
@@ -551,7 +580,7 @@
           state.user = user;
           state.authPending = null;
           state.authStep = 'form';
-          await Promise.all([loadPages(), loadSystems()]);
+          await Promise.all([loadPages(), loadSystems(), loadSystemOptions(), loadProducts(), loadProductOptions()]);
           render();
         } catch (err) {
           submitBtn.disabled = false;
@@ -716,6 +745,7 @@
           state.user = null;
           state.pages = [];
           state.systems = null;
+          state.products = null;
           state.authStep = 'form';
           state.authPending = null;
           render();
@@ -848,6 +878,7 @@
           state.user = null;
           state.pages = [];
           state.systems = null;
+          state.products = null;
           state.selectedPageId = null;
           state.selectedElementId = null;
           render();
@@ -1088,38 +1119,62 @@
     const isLeads = page && page.type === 'leads';
     const isCandidates = page && page.type === 'candidates';
     const isPublicSites = page && page.type === 'public_sites';
-    const isSpecial = isSystems || isDashboard || isUsers || isLeads || isCandidates || isPublicSites;
+    const isCatalog = page && page.type === 'catalog';
+    const isSpecial = isSystems || isDashboard || isUsers || isLeads || isCandidates || isPublicSites || isCatalog;
 
-    const header = el('div', { class: 'main-header' }, [
-      el('div', { class: 'page-title-wrap' }, [
-        el('h2', {}, [page ? page.name : 'Nenhum módulo']),
-      ]),
-      isSystems ? el('div', { class: 'toolbox' }, [
+    let headerTools = null;
+    if (isSystems) {
+      headerTools = el('div', { class: 'toolbox' }, [
         el('button', {
           class: 'btn btn-primary btn-sm',
           onclick: () => openSystemModal('create'),
         }, [el('span', { html: icon('plus') }), ' Novo Sistema']),
-      ]) : (isPublicSites ? el('div', { class: 'toolbox' }, [
+      ]);
+    } else if (isPublicSites) {
+      headerTools = el('div', { class: 'toolbox' }, [
         el('button', {
           class: 'btn btn-primary btn-sm',
           onclick: () => copyPublicSitesLink(),
         }, [el('span', { html: icon('link') }), ' Copiar link público']),
-      ]) : (isUsers ? el('div', { class: 'toolbox' }, [
+      ]);
+    } else if (isUsers) {
+      headerTools = el('div', { class: 'toolbox' }, [
         el('button', {
           class: 'btn btn-primary btn-sm',
           onclick: () => { state.userModal = { mode: 'create' }; render(); },
         }, [el('span', { html: icon('plus') }), ' Novo Usuário']),
-      ]) : (isLeads ? el('div', { class: 'toolbox' }, [
+      ]);
+    } else if (isLeads) {
+      headerTools = el('div', { class: 'toolbox' }, [
+        el('button', {
+          class: 'btn btn-primary btn-sm',
+          onclick: openLeadImportModal,
+        }, [el('span', { html: icon('upload') }), ' Importar Excel']),
         el('button', {
           class: 'btn btn-ghost btn-sm',
           onclick: () => copyLeadFormLink(),
         }, [el('span', { html: icon('link') }), ' Copiar link do formulário']),
-      ]) : (isCandidates ? el('div', { class: 'toolbox' }, [
+      ]);
+    } else if (isCatalog) {
+      headerTools = el('div', { class: 'toolbox' }, [
+        el('button', {
+          class: 'btn btn-primary btn-sm',
+          onclick: () => { state.productModal = { mode: 'create' }; render(); },
+        }, [el('span', { html: icon('plus') }), ' Nova Solução']),
+        el('button', {
+          class: 'btn btn-ghost btn-sm',
+          onclick: copyProductCatalogLink,
+        }, [el('span', { html: icon('link') }), ' Copiar link público']),
+      ]);
+    } else if (isCandidates) {
+      headerTools = el('div', { class: 'toolbox' }, [
         el('button', {
           class: 'btn btn-ghost btn-sm',
           onclick: () => window.open('https://hello-inova.github.io/hello-inova-sdr-freelancer/', '_blank', 'noopener'),
         }, [el('span', { html: icon('launch') }), ' Abrir formulário']),
-      ]) : (isSpecial ? null : el('div', { class: 'toolbox' }, [
+      ]);
+    } else if (!isSpecial) {
+      headerTools = el('div', { class: 'toolbox' }, [
         toolboxBtn('type', 'Texto', () => addElement('label')),
         toolboxBtn('input', 'Campo', () => addElement('input')),
         toolboxBtn('button', 'Botão', () => addElement('button')),
@@ -1128,7 +1183,14 @@
           el('button', { class: state.mode === 'edit' ? 'active' : '', onclick: () => { state.mode = 'edit'; render(); } }, ['Editar']),
           el('button', { class: state.mode === 'preview' ? 'active' : '', onclick: () => { state.mode = 'preview'; state.selectedElementId = null; render(); } }, ['Visualizar']),
         ]),
-      ])))))),
+      ]);
+    }
+
+    const header = el('div', { class: 'main-header' }, [
+      el('div', { class: 'page-title-wrap' }, [
+        el('h2', {}, [page ? page.name : 'Nenhum módulo']),
+      ]),
+      headerTools,
     ]);
 
     main.appendChild(header);
@@ -1160,6 +1222,11 @@
 
     if (isCandidates) {
       main.appendChild(buildCandidatesManager());
+      return main;
+    }
+
+    if (isCatalog) {
+      main.appendChild(buildProductCatalogManager());
       return main;
     }
 
@@ -1484,9 +1551,9 @@
 
   // ---------------- Leads (módulo especial) ----------------
   // Leads captados pelo formulário público (public/captacao.html). A lista
-  // não tem ação de "criar" pelo Gestor — os leads só entram pelo
-  // formulário público; aqui só é possível visualizar, mudar o status e
-  // excluir.
+  // também aceita importação em massa por planilha Excel. A API faz a
+  // validação novamente antes de gravar, sem confiar no nome/extensão do
+  // arquivo selecionado no navegador.
   const LEAD_STATUS_LABELS = {
     novo: 'Novo',
     em_contato: 'Em contato',
@@ -1505,6 +1572,154 @@
     } else {
       toast(link);
     }
+  }
+
+  function openLeadImportModal() {
+    state.leadImportModal = { file: null, processing: false, result: null, error: '' };
+    render();
+  }
+
+  function closeLeadImportModal() {
+    state.leadImportModal = null;
+    render();
+  }
+
+  function fileToBase64(file) {
+    return file.arrayBuffer().then((buffer) => {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(offset, offset + chunkSize));
+      }
+      return window.btoa(binary);
+    });
+  }
+
+  async function importLeadFile(file, importButton) {
+    const modalState = state.leadImportModal;
+    if (!modalState || modalState.processing) return;
+    if (!file) {
+      modalState.error = 'Selecione um arquivo Excel.';
+      render();
+      return;
+    }
+    if (!/\.(xlsx|xls)$/i.test(file.name)) {
+      modalState.error = 'Use um arquivo no formato .xls ou .xlsx.';
+      render();
+      return;
+    }
+    if (file.size > 2500000) {
+      modalState.error = 'O arquivo deve ter no máximo 2,5 MB.';
+      render();
+      return;
+    }
+
+    modalState.processing = true;
+    modalState.error = '';
+    importButton.disabled = true;
+    importButton.textContent = 'Importando…';
+    try {
+      const fileData = await fileToBase64(file);
+      const result = await api('/leads/import', {
+        method: 'POST',
+        body: { file_name: file.name, file_data: fileData },
+      });
+      state.leads = [...(result.leads || []), ...(state.leads || [])];
+      state.leadImportModal = { file: null, processing: false, result, error: '' };
+      render();
+    } catch (err) {
+      modalState.processing = false;
+      modalState.error = err.message;
+      if (err.data && Array.isArray(err.data.errors)) modalState.errors = err.data.errors;
+      render();
+    }
+  }
+
+  function buildLeadImportModal() {
+    const modalState = state.leadImportModal;
+    const result = modalState.result;
+
+    if (result) {
+      const issueList = (result.errors || []).length
+        ? el('div', { class: 'lead-import-errors' }, [
+          el('strong', {}, ['Linhas não cadastradas']),
+          el('ul', {}, result.errors.map((issue) => el('li', {}, [
+            (issue.row ? `Linha ${issue.row}: ` : (issue.email ? `${issue.email}: ` : '')) + issue.message,
+          ]))),
+        ])
+        : null;
+      const card = el('div', { class: 'modal-card lead-import-card' }, [
+        el('div', { class: 'modal-header' }, [
+          el('h3', {}, ['Importação concluída']),
+          el('button', { class: 'btn btn-ghost btn-icon', onclick: closeLeadImportModal, html: icon('close') }),
+        ]),
+        el('div', { class: 'modal-body' }, [
+          el('div', { class: 'lead-import-summary' }, [
+            el('div', { class: 'lead-import-stat success' }, [el('strong', {}, [String(result.imported_count)]), el('span', {}, ['Importados'])]),
+            el('div', { class: 'lead-import-stat warning' }, [el('strong', {}, [String(result.duplicate_count)]), el('span', {}, ['Duplicados'])]),
+            el('div', { class: 'lead-import-stat danger' }, [el('strong', {}, [String(result.rejected_count)]), el('span', {}, ['Inválidos'])]),
+          ]),
+          issueList,
+        ]),
+        el('div', { class: 'modal-footer' }, [
+          el('button', { class: 'btn btn-primary', onclick: closeLeadImportModal }, ['Concluir']),
+        ]),
+      ]);
+      return el('div', {
+        class: 'modal-overlay',
+        onclick: (event) => { if (event.target === event.currentTarget) closeLeadImportModal(); },
+      }, [card]);
+    }
+
+    const fileInput = el('input', { type: 'file', accept: '.xls,.xlsx' });
+    const selectedName = el('span', { class: 'lead-import-file-name' }, ['Nenhum arquivo selecionado']);
+    const importButton = el('button', { class: 'btn btn-primary', type: 'button', disabled: true }, [
+      el('span', { html: icon('upload') }), ' Importar leads',
+    ]);
+    fileInput.addEventListener('change', () => {
+      modalState.file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+      modalState.error = '';
+      selectedName.textContent = modalState.file ? modalState.file.name : 'Nenhum arquivo selecionado';
+      importButton.disabled = !modalState.file;
+    });
+    importButton.addEventListener('click', () => importLeadFile(modalState.file, importButton));
+
+    const shownErrors = modalState.errors || [];
+    const card = el('div', { class: 'modal-card lead-import-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Importar leads do Excel']),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeLeadImportModal, html: icon('close') }),
+      ]),
+      el('div', { class: 'modal-body' }, [
+        el('div', { class: 'hint-box lead-import-hint' }, [
+          el('span', { html: icon('info') }),
+          el('div', {}, [
+            el('strong', {}, ['Como preparar a planilha']),
+            el('p', {}, ['Use a primeira aba e uma linha de cabeçalho. As colunas obrigatórias são Nome, WhatsApp e E-mail.']),
+            el('p', {}, ['Opcionais: Serviços, Segmento, Descrição e Status. Separe vários serviços por vírgula ou ponto e vírgula.']),
+          ]),
+        ]),
+        el('label', { class: 'lead-import-picker' }, [
+          fileInput,
+          el('span', { class: 'btn btn-ghost' }, [el('span', { html: icon('upload') }), ' Selecionar .XLS ou .XLSX']),
+          selectedName,
+        ]),
+        el('p', { class: 'field-hint lead-import-limit' }, ['Até 1.000 leads e 2,5 MB por arquivo. Duplicados por e-mail + WhatsApp serão ignorados.']),
+        modalState.error ? el('div', { class: 'dashboard-error lead-import-error' }, [modalState.error]) : null,
+        shownErrors.length ? el('ul', { class: 'lead-import-inline-errors' }, shownErrors.map((issue) =>
+          el('li', {}, [(issue.row ? `Linha ${issue.row}: ` : '') + issue.message])
+        )) : null,
+      ]),
+      el('div', { class: 'modal-footer' }, [
+        el('button', { class: 'btn btn-ghost', onclick: closeLeadImportModal }, ['Cancelar']),
+        importButton,
+      ]),
+    ]);
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (event) => { if (event.target === event.currentTarget) closeLeadImportModal(); },
+    }, [card]);
   }
 
   function buildLeadsManager() {
@@ -2104,6 +2319,276 @@
     } else {
       toast('Sistema aberto em nova aba.');
     }
+  }
+
+  async function copyProductCatalogLink() {
+    let link = state.productOptions.public_url;
+    if (!link) {
+      await loadProductOptions();
+      link = state.productOptions.public_url;
+    }
+    if (!link) { toast('Não foi possível gerar o link do catálogo.', true); return; }
+    try {
+      await navigator.clipboard.writeText(link);
+      toast('Link do catálogo copiado.');
+    } catch (err) {
+      prompt('Copie o link público:', link);
+    }
+  }
+
+  function buildProductCatalogManager() {
+    const wrap = el('div', { class: 'canvas-scroll' });
+    const inner = el('div', { class: 'sysmgr' });
+    const card = el('div', { class: 'sysmgr-card grow' });
+    const products = state.products || [];
+
+    card.appendChild(el('div', { class: 'sysmgr-header-row' }, [
+      el('div', { class: 'htext' }, [
+        el('h3', {}, [el('span', { html: icon('layers') }), ' Soluções Hello Inova']),
+        el('p', { class: 'sysmgr-sub' }, ['Cadastre produtos, valores, detalhes e imagens para a vitrine comercial.']),
+      ]),
+      state.productOptions.public_url ? el('a', {
+        class: 'btn btn-ghost btn-sm', href: state.productOptions.public_url, target: '_blank', rel: 'noopener',
+      }, [el('span', { html: icon('launch') }), ' Abrir catálogo']) : null,
+    ]));
+
+    const search = el('input', {
+      type: 'search', class: 'sysmgr-search-input', placeholder: 'Pesquisar soluções…', value: state.productSearch,
+    });
+    card.appendChild(el('div', { class: 'sysmgr-search' }, [
+      el('span', { class: 'search-icon', html: icon('search') }), search,
+    ]));
+
+    const categories = [...new Set(products.map((product) => product.category).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const categoryBar = el('div', { class: 'sysmgr-filters' });
+    categories.forEach((category) => categoryBar.appendChild(el('button', {
+      type: 'button',
+      class: 'filter-chip' + (state.productCategory === category ? ' active' : ''),
+      onclick: () => { state.productCategory = state.productCategory === category ? '' : category; render(); },
+    }, [category])));
+    if (state.productCategory) categoryBar.appendChild(el('button', {
+      type: 'button', class: 'filter-chip clear', onclick: () => { state.productCategory = ''; render(); },
+    }, ['Limpar filtro']));
+    if (categories.length) card.appendChild(categoryBar);
+
+    const grid = el('div', { class: 'product-manager-grid' });
+    const refresh = () => {
+      state.productSearch = search.value;
+      const term = state.productSearch.trim().toLowerCase();
+      const visible = products.filter((product) => {
+        const hay = [product.name, product.category, product.summary, product.details].join(' ').toLowerCase();
+        return (!term || hay.includes(term)) && (!state.productCategory || product.category === state.productCategory);
+      });
+      grid.innerHTML = '';
+      if (!visible.length) {
+        grid.appendChild(el('div', { class: 'sysmgr-empty product-manager-empty' }, [
+          products.length ? 'Nenhuma solução corresponde aos filtros.' : 'Nenhuma solução cadastrada. Clique em "Nova Solução" para começar.',
+        ]));
+        return;
+      }
+      visible.forEach((product) => grid.appendChild(buildProductManagerCard(product)));
+    };
+    search.addEventListener('input', refresh);
+    refresh();
+    card.appendChild(grid);
+    inner.appendChild(card);
+    wrap.appendChild(inner);
+    return wrap;
+  }
+
+  function buildProductManagerCard(product) {
+    const image = product.images && product.images[0]
+      ? el('img', { src: product.images[0], alt: '' })
+      : el('span', { class: 'product-manager-fallback', html: icon('image') });
+    return el('article', { class: 'product-manager-card' }, [
+      el('div', { class: 'product-manager-image' }, [
+        image,
+        product.images && product.images.length > 1
+          ? el('span', { class: 'product-image-count' }, [String(product.images.length) + ' imagens'])
+          : null,
+      ]),
+      el('div', { class: 'product-manager-content' }, [
+        el('div', { class: 'product-manager-meta' }, [
+          product.category ? el('span', { class: 'category-badge' }, [product.category]) : null,
+          el('span', { class: 'category-badge ' + (product.is_public ? 'status-public' : 'muted') }, [
+            product.is_public ? 'Publicado' : 'Privado',
+          ]),
+        ]),
+        el('h3', {}, [product.name]),
+        el('p', {}, [product.summary || 'Sem resumo cadastrado.']),
+        el('div', { class: 'product-manager-price' }, [
+          product.price === null ? 'Valor sob consulta' : formatCurrencyBRL(product.price),
+          product.price_details ? el('small', {}, [product.price_details]) : null,
+        ]),
+      ]),
+      el('div', { class: 'product-manager-actions' }, [
+        el('button', {
+          class: 'btn btn-ghost btn-sm', type: 'button',
+          onclick: () => { state.productModal = { mode: 'edit', product }; render(); },
+        }, [el('span', { html: icon('edit') }), ' Editar']),
+        el('button', {
+          class: 'btn btn-danger btn-icon', type: 'button', title: 'Excluir solução',
+          onclick: () => deleteProduct(product), html: icon('trash'),
+        }),
+      ]),
+    ]);
+  }
+
+  async function deleteProduct(product) {
+    if (!confirm('Excluir a solução "' + product.name + '"? Essa ação não pode ser desfeita.')) return;
+    try {
+      await api('/products/' + product.id, { method: 'DELETE' });
+      state.products = (state.products || []).filter((item) => item.id !== product.id);
+      render();
+      toast('Solução excluída.');
+    } catch (err) { toast(err.message, true); }
+  }
+
+  function closeProductModal() {
+    state.productModal = null;
+    render();
+  }
+
+  function readProductImage(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !/^image\/(png|jpe?g|webp|gif)$/i.test(file.type)) {
+        reject(new Error('Use imagens PNG, JPG, WEBP ou GIF.'));
+        return;
+      }
+      if (file.size > 520000) {
+        reject(new Error('Cada imagem deve ter no máximo cerca de 500 KB.'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function buildProductModal() {
+    const modal = state.productModal;
+    const editing = modal.mode === 'edit';
+    const product = editing ? modal.product : {};
+    let images = Array.isArray(product.images) ? product.images.slice(0, 5) : [];
+
+    const nameInput = el('input', { type: 'text', maxlength: '200', value: product.name || '', placeholder: 'Ex.: Site institucional premium' });
+    const categoryInput = el('input', { type: 'text', maxlength: '80', value: product.category || '', placeholder: 'Ex.: Sites, Automação, E-commerce' });
+    const summaryInput = el('textarea', { rows: '3', maxlength: '400', placeholder: 'Resumo comercial da solução' }, [product.summary || '']);
+    const detailsInput = el('textarea', { rows: '6', maxlength: '6000', placeholder: 'Descreva entregáveis, diferenciais e como a solução funciona' }, [product.details || '']);
+    const observationsInput = el('textarea', { rows: '4', maxlength: '4000', placeholder: 'Anotações visíveis somente no Gestor' }, [product.observations || '']);
+    const priceInput = el('input', { type: 'number', min: '0', max: '9999999999.99', step: '0.01', value: product.price === null || product.price === undefined ? '' : String(product.price), placeholder: '0,00' });
+    const priceDetailsInput = el('input', { type: 'text', maxlength: '300', value: product.price_details || '', placeholder: 'Ex.: a partir de, mensal ou pagamento único' });
+    const publicInput = el('input', { type: 'checkbox', checked: product.is_public ? true : null });
+    const imageInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: true });
+    const imageGrid = el('div', { class: 'product-image-editor-grid' });
+
+    const renderImages = () => {
+      imageGrid.innerHTML = '';
+      images.forEach((image, index) => imageGrid.appendChild(el('div', { class: 'product-image-editor-item' }, [
+        el('img', { src: image, alt: 'Imagem ' + (index + 1) }),
+        el('button', {
+          type: 'button', title: 'Remover imagem', 'aria-label': 'Remover imagem ' + (index + 1),
+          onclick: () => { images.splice(index, 1); renderImages(); },
+        }, ['×']),
+      ])));
+      if (!images.length) imageGrid.appendChild(el('div', { class: 'product-image-editor-empty' }, [
+        el('span', { html: icon('image') }), ' Nenhuma imagem adicionada',
+      ]));
+    };
+    renderImages();
+
+    imageInput.addEventListener('change', async () => {
+      const files = Array.from(imageInput.files || []);
+      if (images.length + files.length > 5) {
+        toast('Você pode cadastrar no máximo 5 imagens.', true);
+        imageInput.value = '';
+        return;
+      }
+      try {
+        const loaded = await Promise.all(files.map(readProductImage));
+        images = images.concat(loaded);
+        renderImages();
+      } catch (err) {
+        toast(err.message, true);
+      }
+      imageInput.value = '';
+    });
+
+    const saveButton = el('button', { class: 'btn btn-primary', type: 'button' }, [editing ? 'Salvar alterações' : 'Cadastrar solução']);
+    saveButton.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      if (!name) { toast('Informe o nome da solução.', true); return; }
+      const price = priceInput.value === '' ? null : Number(priceInput.value);
+      if (price !== null && (!Number.isFinite(price) || price < 0)) { toast('Informe um valor válido.', true); return; }
+      saveButton.disabled = true;
+      try {
+        const body = {
+          name,
+          category: categoryInput.value.trim(),
+          summary: summaryInput.value.trim(),
+          details: detailsInput.value.trim(),
+          observations: observationsInput.value.trim(),
+          price,
+          price_details: priceDetailsInput.value.trim(),
+          images,
+          is_public: publicInput.checked,
+        };
+        const response = editing
+          ? await api('/products/' + product.id, { method: 'PUT', body })
+          : await api('/products', { method: 'POST', body });
+        if (editing) {
+          state.products = (state.products || []).map((item) => item.id === response.product.id ? response.product : item);
+        } else {
+          state.products = [response.product, ...(state.products || [])];
+        }
+        closeProductModal();
+        toast(editing ? 'Solução atualizada.' : 'Solução cadastrada.');
+      } catch (err) {
+        saveButton.disabled = false;
+        toast(err.message, true);
+      }
+    });
+
+    const card = el('div', { class: 'modal-card product-modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, [editing ? 'Editar Solução' : 'Nova Solução']),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeProductModal, html: icon('close') }),
+      ]),
+      el('div', { class: 'modal-body product-modal-body' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Nome da solução']), nameInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Categoria']), categoryInput]),
+        el('div', { class: 'field field-span-2' }, [el('label', {}, ['Resumo']), summaryInput]),
+        el('div', { class: 'field field-span-2' }, [el('label', {}, ['Detalhes da solução']), detailsInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Valor (R$)']), priceInput]),
+        el('div', { class: 'field' }, [el('label', {}, ['Complemento do valor']), priceDetailsInput]),
+        el('div', { class: 'field field-span-2' }, [
+          el('label', {}, ['Imagens da solução']),
+          imageGrid,
+          imageInput,
+          el('div', { class: 'field-hint' }, ['Até 5 imagens. PNG, JPG, WEBP ou GIF, com cerca de 500 KB cada.']),
+        ]),
+        el('div', { class: 'field field-span-2' }, [
+          el('label', {}, ['Observações internas']), observationsInput,
+          el('div', { class: 'field-hint' }, ['Este campo não aparece no catálogo público.']),
+        ]),
+        el('label', { class: 'publish-check field-span-2' }, [
+          publicInput,
+          el('span', {}, [
+            el('strong', {}, ['Publicar no catálogo']),
+            el('small', {}, ['Qualquer pessoa com o link poderá visualizar esta solução.']),
+          ]),
+        ]),
+      ]),
+      el('div', { class: 'modal-footer' }, [
+        el('button', { class: 'btn btn-ghost', onclick: closeProductModal }, ['Cancelar']),
+        saveButton,
+      ]),
+    ]);
+    return el('div', {
+      class: 'modal-overlay', onclick: (event) => { if (event.target === event.currentTarget) closeProductModal(); },
+    }, [card]);
   }
 
   async function copyPublicSitesLink() {
