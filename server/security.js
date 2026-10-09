@@ -33,7 +33,8 @@ function protectUnsafeRequests(req, res, next) {
   if (!isSameOrigin(req)) {
     return res.status(403).json({ error: 'Origem da requisição não permitida.' });
   }
-  if (req.path.startsWith('/api/') && !req.is('application/json')) {
+  const expectsJsonBody = ['POST', 'PUT', 'PATCH'].includes(req.method);
+  if (expectsJsonBody && req.path.startsWith('/api/') && !req.is('application/json')) {
     return res.status(415).json({ error: 'Envie os dados no formato JSON.' });
   }
   next();

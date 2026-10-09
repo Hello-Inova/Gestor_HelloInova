@@ -1190,9 +1190,13 @@
 
   function buildDashboardContent(data) {
     const cards = el('div', { class: 'dashboard-cards' }, [
-      dashboardStatCard('server', 'Sistemas cadastrados', String(data.systems_total || 0)),
-      dashboardStatCard('layers', 'Assinaturas ativas', String(data.subscriptions_total_count || 0)),
-      dashboardStatCard('cash', 'Valor total em assinaturas', formatCurrencyBRL(data.subscriptions_total_value) || 'R$ 0,00'),
+      dashboardStatCard('server', 'Sistemas cadastrados', String(data.systems_total || 0), 'Total no Gestor', 'blue'),
+      dashboardStatCard('globe', 'Projetos publicados', String(data.systems_public_total || 0),
+        String(data.niches_in_use || 0) + ((data.niches_in_use || 0) === 1 ? ' nicho em uso' : ' nichos em uso'), 'cyan'),
+      dashboardStatCard('layers', 'Assinaturas cadastradas', String(data.subscriptions_total_count || 0),
+        String(data.systems_with_subscriptions || 0) + ((data.systems_with_subscriptions || 0) === 1 ? ' sistema com assinatura' : ' sistemas com assinatura'), 'purple'),
+      dashboardStatCard('cash', 'Valor total das assinaturas', formatCurrencyBRL(data.subscriptions_total_value) || 'R$ 0,00',
+        'Soma dos valores cadastrados', 'green'),
     ]);
 
     const categories = data.categories || [];
@@ -1211,12 +1215,13 @@
     return el('div', {}, [cards, catCard]);
   }
 
-  function dashboardStatCard(iconName, label, value) {
-    return el('div', { class: 'dashboard-card dashboard-stat-card' }, [
+  function dashboardStatCard(iconName, label, value, caption, tone) {
+    return el('div', { class: 'dashboard-card dashboard-stat-card dashboard-tone-' + (tone || 'blue') }, [
       el('div', { class: 'dashboard-stat-icon', html: icon(iconName) }),
       el('div', { class: 'dashboard-stat-body' }, [
         el('div', { class: 'dashboard-stat-value' }, [value]),
         el('div', { class: 'dashboard-stat-label' }, [label]),
+        caption ? el('div', { class: 'dashboard-stat-caption' }, [caption]) : null,
       ]),
     ]);
   }
@@ -2017,11 +2022,20 @@
 
     const nicheBar = el('div', { class: 'sysmgr-filters' });
     (state.systemOptions.niches || []).forEach((niche) => {
-      nicheBar.appendChild(el('button', {
+      const nicheChip = el('button', {
         type: 'button', class: 'filter-chip' + (state.publicSitesNiche === niche ? ' active' : ''),
         onclick: () => { state.publicSitesNiche = state.publicSitesNiche === niche ? '' : niche; render(); },
-      }, [niche]));
+      }, [niche]);
+      const removeBtn = el('button', {
+        type: 'button', class: 'filter-chip-delete', title: 'Excluir nicho ' + niche,
+        'aria-label': 'Excluir nicho ' + niche,
+        onclick: (event) => { event.stopPropagation(); deleteSystemOption('niches', niche); },
+      }, ['×']);
+      nicheBar.appendChild(el('div', { class: 'filter-chip-wrap' }, [nicheChip, removeBtn]));
     });
+    nicheBar.appendChild(el('button', {
+      type: 'button', class: 'filter-chip add', onclick: () => createSystemOption('niches'),
+    }, ['+ Novo nicho']));
     card.appendChild(nicheBar);
 
     const grid = el('div', { class: 'public-sites-grid' });
@@ -2055,18 +2069,18 @@
       : el('span', { class: 'public-site-fallback' }, [(sys.name || '?').charAt(0).toUpperCase()]);
     return el('article', { class: 'public-site-card' }, [
       el('div', { class: 'public-site-logo' }, [logo]),
-      el('div', { class: 'public-site-content' }, [
+      el('div', { class: 'public-site-details' }, [
         el('div', { class: 'public-site-meta' }, [sys.niche || 'Sem nicho']),
         el('h3', {}, [sys.name]),
         el('p', {}, [sys.specifications || 'Conheça este projeto da Hello Inova.']),
         el('div', { class: 'sysmgr-row-badges' }, (sys.categories || []).map((cat) =>
           el('span', { class: 'category-badge' }, [cat])
         )),
-        el('a', {
-          class: 'btn btn-primary btn-sm public-site-visit', href: normalizedUrl(sys.url),
-          target: '_blank', rel: 'noopener',
-        }, [el('span', { html: icon('launch') }), internalPreview ? ' Acessar sistema' : ' Visitar']),
       ]),
+      el('a', {
+        class: 'btn btn-primary btn-sm public-site-visit', href: normalizedUrl(sys.url),
+        target: '_blank', rel: 'noopener',
+      }, [el('span', { html: icon('launch') }), internalPreview ? ' Acessar sistema' : ' Visitar']),
     ]);
   }
 

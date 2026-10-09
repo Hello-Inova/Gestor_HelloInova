@@ -13,7 +13,10 @@ const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 // Resumo gerencial/financeiro: total de sistemas, total de assinaturas
 // (quantidade e valor somado) e quantidade de sistemas por categoria.
 router.get('/summary', ah(async (req, res) => {
-  const rows = await db.all('SELECT categories, subscriptions FROM systems WHERE user_id = ?', req.user.account_id);
+  const rows = await db.all(
+    'SELECT categories, subscriptions, is_public, niche FROM systems WHERE user_id = ?',
+    req.user.account_id
+  );
   const categoryRows = await db.all(
     "SELECT name FROM system_taxonomies WHERE account_id = ? AND kind = 'category' ORDER BY lower(name)",
     req.user.account_id
@@ -22,11 +25,16 @@ router.get('/summary', ah(async (req, res) => {
 
   let subscriptionsCount = 0;
   let subscriptionsValue = 0;
+  let publicSystemsCount = 0;
+  let systemsWithSubscriptions = 0;
+  const nichesInUse = new Set();
   const categoryCounts = {};
   categoriesAvailable.forEach((c) => { categoryCounts[c] = 0; });
   let uncategorized = 0;
 
   for (const row of rows) {
+    if (row.is_public) publicSystemsCount += 1;
+    if (typeof row.niche === 'string' && row.niche.trim()) nichesInUse.add(row.niche.trim());
     let categories = [];
     try {
       const parsed = JSON.parse(row.categories || '[]');
@@ -42,21 +50,35 @@ router.get('/summary', ah(async (req, res) => {
     let subscriptions = [];
     try {
       const parsed = JSON.parse(row.subscriptions || '[]');
-      if (Array.isArray(parsed)) subscriptions = parsed;
+      if (Array.isArray(parsed)) {
+        subscriptions = parsed.filter((item) => item && typeof item === 'object' && (
+          (typeof item.name === 'string' && item.name.trim()) ||
+          (item.value !== null && item.value !== undefined && item.value !== '') ||
+          (typeof item.due_date === 'string' && item.due_date)
+        ));
+      }
     } catch (e) { /* ignora assinaturas inválidas */ }
 
     subscriptionsCount += subscriptions.length;
+    if (subscriptions.length) systemsWithSubscriptions += 1;
     subscriptionsValue += subscriptions.reduce(
-      (sum, s) => sum + (typeof s.value === 'number' && !isNaN(s.value) ? s.value : 0),
+      (sum, subscription) => {
+        const value = Number(subscription.value);
+        return sum + (Number.isFinite(value) && value >= 0 ? value : 0);
+      },
       0
     );
   }
 
   res.json({
     systems_total: rows.length,
+    systems_public_total: publicSystemsCount,
+    systems_with_subscriptions: systemsWithSubscriptions,
+    niches_in_use: nichesInUse.size,
     subscriptions_total_count: subscriptionsCount,
     subscriptions_total_value: subscriptionsValue,
     categories: Object.keys(categoryCounts)
+      .filter((category) => categoryCounts[category] > 0)
       .sort((a, b) => a.localeCompare(b, 'pt-BR'))
       .map((c) => ({ category: c, count: categoryCounts[c] || 0 })),
     uncategorized_count: uncategorized,

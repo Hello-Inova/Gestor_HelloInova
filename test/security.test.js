@@ -100,3 +100,18 @@ test('exceção CORS de candidatos vale somente para o cadastro público', () =>
   );
   assert.equal(adminEditRes.statusCode, 403);
 });
+
+test('DELETE autenticado sem corpo não exige Content-Type JSON', () => {
+  let allowed = false;
+  const res = response();
+  protectUnsafeRequests(
+    request(
+      { origin: 'https://gestor.exemplo.com', host: 'gestor.exemplo.com' },
+      { method: 'DELETE', path: '/api/systems/options/niches/Escolar' }
+    ),
+    res,
+    () => { allowed = true; }
+  );
+  assert.equal(allowed, true);
+  assert.equal(res.statusCode, 200);
+});
