@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
+const { hasModuleAccess, normalizeRole, requireAdmin } = require('../permissions');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -130,8 +131,14 @@ router.get(
       req.user.account_id
     );
 
+    const visiblePages = pages.filter((page) => {
+      if (normalizeRole(req.user.role) === 'admin') return true;
+      if (page.type === 'users' || page.type === 'canvas') return false;
+      return hasModuleAccess(req.user, page.type);
+    });
+
     const result = await Promise.all(
-      pages.map(async (p) => ({
+      visiblePages.map(async (p) => ({
         ...p,
         elements: ['systems', 'dashboard', 'users', 'leads', 'candidates', 'public_sites'].includes(p.type)
           ? []
@@ -145,6 +152,7 @@ router.get(
 // Cria módulo (sempre do tipo "canvas" — os módulos especiais são únicos e criados no cadastro)
 router.post(
   '/',
+  requireAdmin,
   ah(async (req, res) => {
     const { name } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do módulo.' });
@@ -168,6 +176,7 @@ router.post(
 // Renomeia / reordena módulo
 router.put(
   '/:id',
+  requireAdmin,
   ah(async (req, res) => {
     const page = await getOwnedPage(req.params.id, req.user.account_id);
     if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
@@ -189,6 +198,7 @@ router.put(
 // Exclui módulo
 router.delete(
   '/:id',
+  requireAdmin,
   ah(async (req, res) => {
     const page = await getOwnedPage(req.params.id, req.user.account_id);
     if (!page) return res.status(404).json({ error: 'Módulo não encontrado.' });
@@ -205,6 +215,7 @@ router.delete(
 // Reordena várias páginas de uma vez (drag no menu lateral)
 router.put(
   '/',
+  requireAdmin,
   ah(async (req, res) => {
     const { order } = req.body || {}; // array de ids na nova ordem
     if (!Array.isArray(order)) return res.status(400).json({ error: 'Ordem inválida.' });
@@ -221,6 +232,7 @@ router.put(
 // Cria elemento em uma página
 router.post(
   '/:id/elements',
+  requireAdmin,
   ah(async (req, res) => {
     const page = await getOwnedPage(req.params.id, req.user.account_id);
     if (!page) return res.status(404).json({ error: 'Página não encontrada.' });
@@ -283,6 +295,7 @@ async function getOwnedElement(elementId, accountId) {
 // Atualiza elemento (posição, tamanho, estilo, conteúdo)
 router.put(
   '/elements/:elId',
+  requireAdmin,
   ah(async (req, res) => {
     const el = await getOwnedElement(req.params.elId, req.user.account_id);
     if (!el) return res.status(404).json({ error: 'Elemento não encontrado.' });
@@ -333,6 +346,7 @@ router.put(
 // Exclui elemento
 router.delete(
   '/elements/:elId',
+  requireAdmin,
   ah(async (req, res) => {
     const el = await getOwnedElement(req.params.elId, req.user.account_id);
     if (!el) return res.status(404).json({ error: 'Elemento não encontrado.' });

@@ -5,6 +5,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
 const { rateLimit } = require('../rate-limit');
+const { requireAnyModule } = require('../permissions');
 
 const router = express.Router();
 const limitCandidateCreation = rateLimit({ name: 'candidate-create', max: 5, windowMinutes: 60 });
@@ -142,6 +143,7 @@ router.post(
 router.get(
   '/',
   requireAuth,
+  requireAnyModule('candidates'),
   ah(async (req, res) => {
     const rows = await db.all('SELECT * FROM candidates ORDER BY created_at DESC');
     res.json({ candidates: rows.map(serializeCandidate) });
@@ -151,6 +153,7 @@ router.get(
 router.put(
   '/:id',
   requireAuth,
+  requireAnyModule('candidates'),
   ah(async (req, res) => {
     const candidate = await db.get('SELECT * FROM candidates WHERE id = ?', req.params.id);
     if (!candidate) return res.status(404).json({ error: 'Candidato não encontrado.' });
@@ -189,6 +192,7 @@ router.put(
 router.delete(
   '/:id',
   requireAuth,
+  requireAnyModule('candidates'),
   ah(async (req, res) => {
     const candidate = await db.get('SELECT id FROM candidates WHERE id = ?', req.params.id);
     if (!candidate) return res.status(404).json({ error: 'Candidato não encontrado.' });

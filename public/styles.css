@@ -849,6 +849,33 @@ button { font-family: inherit; }
 .filter-chip-wrap:has(.filter-chip.active) .filter-chip-delete { color: #fff; border-left-color: rgba(255,255,255,.28); }
 .taxonomy-add-btn { margin-top: 8px; }
 
+.user-permissions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 2px;
+}
+.user-permission-option {
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
+  margin: 0 !important;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-0);
+  color: var(--text-1) !important;
+  cursor: pointer;
+}
+.user-permission-option:has(input:checked) { border-color: rgba(47,123,255,.45); background: rgba(47,123,255,.1); }
+.user-permission-option input { width: 16px; height: 16px; margin: 0; accent-color: var(--blue-500); }
+.user-permission-option input:disabled { cursor: not-allowed; }
+.user-role-badge { background: rgba(167,112,255,.14); color: #bd91ff; border-color: rgba(167,112,255,.3); }
+
+@media (max-width: 560px) {
+  .user-permissions-grid { grid-template-columns: 1fr; }
+}
+
 .publish-check {
   display: flex;
   align-items: flex-start;

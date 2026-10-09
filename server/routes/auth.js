@@ -12,6 +12,13 @@ const {
 } = require('../auth');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../email');
 const { validatePassword } = require('../security');
+const {
+  MODULE_CATALOG,
+  VALID_ROLES,
+  parseModulePermissions,
+  serializeUserAccess,
+  requireAdmin,
+} = require('../permissions');
 
 const router = express.Router();
 
@@ -144,16 +151,39 @@ function hashResetToken(token) {
 }
 
 function loginUser(res, row) {
+  const access = serializeUserAccess(row);
   const user = {
     id: row.id,
     name: row.name,
     email: row.email,
     account_id: row.account_id,
     session_version: row.session_version,
+    ...access,
   };
   const token = signToken(user);
   setAuthCookie(res, token);
-  return { id: user.id, name: user.name, email: user.email };
+  return { id: user.id, name: user.name, email: user.email, ...access };
+}
+
+function publicUser(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    created_at: row.created_at,
+    ...serializeUserAccess(row),
+  };
+}
+
+function validateAccess(role, permissions) {
+  if (!VALID_ROLES.has(role)) return { error: 'Perfil inválido.' };
+  const normalizedPermissions = role === 'admin'
+    ? MODULE_CATALOG.map((module) => module.id)
+    : parseModulePermissions(permissions);
+  if (role === 'vendas' && !normalizedPermissions.length) {
+    return { error: 'Selecione ao menos um módulo para o perfil de Vendas.' };
+  }
+  return { role, permissions: normalizedPermissions };
 }
 
 // ---------------- Cadastro de usuário (bootstrap de uma conta nova) ----------------
@@ -468,9 +498,12 @@ router.get(
   '/me',
   requireAuth,
   ah(async (req, res) => {
-    const row = await db.get('SELECT id, name, email, role, created_at FROM users WHERE id = ?', req.user.id);
+    const row = await db.get(
+      'SELECT id, name, email, role, module_permissions, created_at FROM users WHERE id = ?',
+      req.user.id
+    );
     if (!row) return res.status(401).json({ error: 'Não autenticado.' });
-    res.json({ user: row });
+    res.json({ user: publicUser(row) });
   })
 );
 
@@ -522,8 +555,11 @@ router.put(
     const token = signToken(user);
     setAuthCookie(res, token);
 
-    const updated = await db.get('SELECT id, name, email, role, created_at FROM users WHERE id = ?', current.id);
-    res.json({ user: updated });
+    const updated = await db.get(
+      'SELECT id, name, email, role, module_permissions, created_at FROM users WHERE id = ?',
+      current.id
+    );
+    res.json({ user: publicUser(updated) });
   })
 );
 
@@ -537,42 +573,75 @@ router.put(
 router.get(
   '/users',
   requireAuth,
+  requireAdmin,
   ah(async (req, res) => {
     const rows = await db.all(
-      'SELECT id, name, email, created_at FROM users WHERE account_id = ? ORDER BY id ASC',
+      'SELECT id, name, email, role, module_permissions, created_at FROM users WHERE account_id = ? ORDER BY id ASC',
       req.user.account_id
     );
-    res.json({ users: rows });
+    res.json({ users: rows.map(publicUser), modules: MODULE_CATALOG });
   })
 );
 
 router.post(
   '/users',
   requireAuth,
+  requireAdmin,
   ah(async (req, res) => {
-    const { name, email, password } = req.body || {};
+    const { name, email, password, role = 'vendas', module_permissions = [] } = req.body || {};
 
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Informe o nome.' });
     if (!isValidEmail(email)) return res.status(400).json({ error: 'E-mail inválido.' });
     const passwordError = validatePassword(password);
     if (passwordError) return res.status(400).json({ error: passwordError });
+    const access = validateAccess(role, module_permissions);
+    if (access.error) return res.status(400).json({ error: access.error });
 
     const normalizedEmail = email.toLowerCase();
     const existing = await db.get('SELECT id FROM users WHERE email = ?', normalizedEmail);
     if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
 
     const inserted = await db.run(
-      `INSERT INTO users (name, email, password_hash, role, email_verified, account_id)
-       VALUES (?, ?, ?, ?, 1, ?)
-       RETURNING id, name, email, created_at`,
+      `INSERT INTO users (name, email, password_hash, role, module_permissions, email_verified, account_id)
+       VALUES (?, ?, ?, ?, ?, 1, ?)
+       RETURNING id, name, email, role, module_permissions, created_at`,
       name.trim().slice(0, 200),
       normalizedEmail,
       hashPassword(password),
-      'admin',
+      access.role,
+      JSON.stringify(access.permissions),
       req.user.account_id
     );
 
-    res.status(201).json({ user: inserted.rows[0] });
+    res.status(201).json({ user: publicUser(inserted.rows[0]) });
+  })
+);
+
+router.put(
+  '/users/:id/access',
+  requireAuth,
+  requireAdmin,
+  ah(async (req, res) => {
+    const target = await db.get(
+      'SELECT * FROM users WHERE id = ? AND account_id = ?',
+      req.params.id,
+      req.user.account_id
+    );
+    if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (target.id === req.user.id) {
+      return res.status(400).json({ error: 'Altere o acesso de outro administrador, não o seu próprio perfil.' });
+    }
+
+    const access = validateAccess(req.body?.role, req.body?.module_permissions);
+    if (access.error) return res.status(400).json({ error: access.error });
+    const updated = await db.run(
+      `UPDATE users SET role = ?, module_permissions = ?, session_version = session_version + 1
+       WHERE id = ? RETURNING id, name, email, role, module_permissions, created_at`,
+      access.role,
+      JSON.stringify(access.permissions),
+      target.id
+    );
+    res.json({ user: publicUser(updated.rows[0]) });
   })
 );
 

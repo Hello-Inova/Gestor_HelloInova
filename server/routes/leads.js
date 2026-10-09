@@ -10,6 +10,7 @@ const crypto = require('node:crypto');
 const db = require('../db');
 const { requireAuth } = require('../auth');
 const { rateLimit } = require('../rate-limit');
+const { requireAnyModule } = require('../permissions');
 
 const router = express.Router();
 
@@ -154,6 +155,7 @@ router.patch(
 router.get(
   '/',
   requireAuth,
+  requireAnyModule('leads'),
   ah(async (req, res) => {
     const rows = await db.all('SELECT * FROM leads ORDER BY created_at DESC');
     res.json({ leads: rows.map(serializeLead) });
@@ -163,6 +165,7 @@ router.get(
 router.put(
   '/:id',
   requireAuth,
+  requireAnyModule('leads'),
   ah(async (req, res) => {
     const lead = await db.get('SELECT * FROM leads WHERE id = ?', req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead não encontrado.' });
@@ -184,6 +187,7 @@ router.put(
 router.delete(
   '/:id',
   requireAuth,
+  requireAnyModule('leads'),
   ah(async (req, res) => {
     const lead = await db.get('SELECT id FROM leads WHERE id = ?', req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead não encontrado.' });

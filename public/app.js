@@ -76,6 +76,21 @@
   }
 
   const DEFAULT_SYSTEM_CATEGORIES = ['Web Site', 'Landing Page', 'Catálogo Digital', 'ERP', 'SAAS', 'Holding H.I'];
+  const USER_MODULE_OPTIONS = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'systems', label: 'Gestor de Sistemas' },
+    { id: 'public_sites', label: 'Sites públicos' },
+    { id: 'leads', label: 'Leads' },
+    { id: 'candidates', label: 'Candidatos' },
+  ];
+
+  function isAdministrator() {
+    return state.user && state.user.role === 'admin';
+  }
+
+  function canAccessModule(moduleId) {
+    return isAdministrator() || !!(state.user && (state.user.module_permissions || []).includes(moduleId));
+  }
 
   // ---------------- API helper ----------------
   async function api(path, opts) {
@@ -269,7 +284,8 @@
 
   async function loadSystems() {
     try {
-      const { systems } = await api('/systems');
+      const path = canAccessModule('systems') ? '/systems' : '/systems/public-preview';
+      const { systems } = await api(path);
       state.systems = systems;
     } catch (err) {
       state.systems = state.systems || [];
@@ -872,7 +888,7 @@
       }, [
         el('span', { class: 'dot' }),
         nameLabel,
-        el('div', { class: 'row-actions' }, [
+        isAdministrator() ? el('div', { class: 'row-actions' }, [
           el('button', {
             class: 'icon-btn', title: 'Mover para cima',
             onclick: async (ev) => { ev.stopPropagation(); await movePage(page.id, -1); },
@@ -883,7 +899,7 @@
             onclick: async (ev) => { ev.stopPropagation(); await movePage(page.id, 1); },
             html: icon('down'),
           }),
-        ]),
+        ]) : null,
       ]);
 
       list.appendChild(item);
@@ -1091,7 +1107,7 @@
       ]) : (isUsers ? el('div', { class: 'toolbox' }, [
         el('button', {
           class: 'btn btn-primary btn-sm',
-          onclick: () => { state.userModal = true; render(); },
+          onclick: () => { state.userModal = { mode: 'create' }; render(); },
         }, [el('span', { html: icon('plus') }), ' Novo Usuário']),
       ]) : (isLeads ? el('div', { class: 'toolbox' }, [
         el('button', {
@@ -1283,12 +1299,26 @@
 
   function buildUserRow(u) {
     const isSelf = state.user && state.user.id === u.id;
+    const roleLabel = u.role === 'admin' ? 'Administrador' : 'Vendas';
+    const permissionLabels = u.role === 'admin'
+      ? ['Todos os módulos']
+      : USER_MODULE_OPTIONS.filter((module) => (u.module_permissions || []).includes(module.id)).map((module) => module.label);
     const mainRow = el('div', { class: 'sysmgr-row-main' }, [
       el('div', { class: 'sysmgr-row-icon' }, [(u.name || '?').trim().charAt(0).toUpperCase()]),
       el('div', { class: 'sysmgr-row-info' }, [
         el('div', { class: 'r-name' }, [u.name, isSelf ? el('span', { class: 'category-badge', style: 'margin-left:8px' }, ['Você']) : null]),
         el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [u.email]),
+        el('div', { class: 'sysmgr-row-badges' }, [
+          el('span', { class: 'category-badge user-role-badge' }, [roleLabel]),
+          ...permissionLabels.map((label) => el('span', { class: 'category-badge muted' }, [label])),
+        ]),
       ]),
+      !isSelf ? el('div', { class: 'sysmgr-row-main-actions' }, [
+        el('button', {
+          type: 'button', class: 'btn btn-ghost btn-sm',
+          onclick: () => { state.userModal = { mode: 'access', user: u }; render(); },
+        }, [el('span', { html: icon('edit') }), ' Acesso']),
+      ]) : null,
     ]);
     return el('div', { class: 'sysmgr-row' }, [mainRow]);
   }
@@ -1298,10 +1328,54 @@
     render();
   }
 
+  function buildUserAccessFields(initialRole, initialPermissions) {
+    const roleSelect = el('select', {}, [
+      el('option', { value: 'vendas', selected: initialRole === 'vendas' ? true : null }, ['Vendas']),
+      el('option', { value: 'admin', selected: initialRole === 'admin' ? true : null }, ['Administrador']),
+    ]);
+    const checked = new Set(initialPermissions || []);
+    const checkboxes = USER_MODULE_OPTIONS.map((module) => ({
+      module,
+      input: el('input', { type: 'checkbox', value: module.id, checked: checked.has(module.id) ? true : null }),
+    }));
+    const permissionsBox = el('div', { class: 'user-permissions-grid' }, checkboxes.map(({ module, input }) =>
+      el('label', { class: 'user-permission-option' }, [input, el('span', {}, [module.label])])
+    ));
+    const hint = el('div', { class: 'field-hint' });
+
+    function refresh() {
+      const isAdmin = roleSelect.value === 'admin';
+      checkboxes.forEach(({ input }) => {
+        input.checked = isAdmin || checked.has(input.value);
+        input.disabled = isAdmin;
+      });
+      hint.textContent = isAdmin
+        ? 'Administradores possuem acesso completo e podem gerenciar usuários e permissões.'
+        : 'Selecione os módulos que este usuário poderá visualizar e utilizar.';
+    }
+    roleSelect.addEventListener('change', () => {
+      if (roleSelect.value === 'vendas') checkboxes.forEach(({ input }) => { input.checked = checked.has(input.value); });
+      refresh();
+    });
+    checkboxes.forEach(({ input }) => input.addEventListener('change', () => {
+      if (input.checked) checked.add(input.value); else checked.delete(input.value);
+    }));
+    refresh();
+
+    return {
+      roleSelect,
+      permissionsBox,
+      hint,
+      getPermissions: () => checkboxes.filter(({ input }) => input.checked).map(({ module }) => module.id),
+    };
+  }
+
   function buildUserModal() {
+    if (state.userModal && state.userModal.mode === 'access') return buildUserAccessModal(state.userModal.user);
     const nameInput = el('input', { type: 'text', placeholder: 'Nome completo', autocomplete: 'name' });
     const emailInput = el('input', { type: 'email', placeholder: 'voce@helloinova.com.br', autocomplete: 'email' });
     const passInput = el('input', { type: 'password', placeholder: '••••••••', autocomplete: 'new-password' });
+    const accessFields = buildUserAccessFields('vendas', ['leads', 'candidates']);
     const passToggle = el('button', {
       type: 'button', class: 'password-toggle', title: 'Mostrar/ocultar senha',
       html: icon('eye'),
@@ -1317,14 +1391,19 @@
       const name = nameInput.value.trim();
       const email = emailInput.value.trim();
       const password = passInput.value;
+      const role = accessFields.roleSelect.value;
+      const modulePermissions = accessFields.getPermissions();
 
       if (!name) { toast('Informe o nome do usuário.', true); return; }
       if (!email) { toast('Informe o e-mail do usuário.', true); return; }
       if (!password || password.length < 12) { toast('A senha deve ter ao menos 12 caracteres.', true); return; }
+      if (role === 'vendas' && !modulePermissions.length) { toast('Selecione ao menos um módulo.', true); return; }
 
       saveBtn.disabled = true;
       try {
-        await api('/auth/users', { method: 'POST', body: { name, email, password } });
+        await api('/auth/users', {
+          method: 'POST', body: { name, email, password, role, module_permissions: modulePermissions },
+        });
         closeUserModal();
         toast('Usuário criado. Ele já pode fazer login normalmente.');
       } catch (err) {
@@ -1340,7 +1419,8 @@
         el('label', {}, ['Senha']),
         el('div', { class: 'password-field' }, [passInput, passToggle]),
       ]),
-      el('div', { class: 'field-hint' }, ['O novo usuário terá acesso aos mesmos sistemas e ao mesmo dashboard desta conta.']),
+      el('div', { class: 'field' }, [el('label', {}, ['Perfil']), accessFields.roleSelect]),
+      el('div', { class: 'field' }, [el('label', {}, ['Módulos permitidos']), accessFields.permissionsBox, accessFields.hint]),
     ]);
 
     const card = el('div', { class: 'modal-card' }, [
@@ -1358,6 +1438,47 @@
     return el('div', {
       class: 'modal-overlay',
       onclick: (ev) => { if (ev.target === ev.currentTarget) closeUserModal(); },
+    }, [card]);
+  }
+
+  function buildUserAccessModal(user) {
+    const accessFields = buildUserAccessFields(user.role || 'vendas', user.module_permissions || []);
+    const saveBtn = el('button', { class: 'btn btn-primary', type: 'button' }, ['Salvar acesso']);
+    saveBtn.addEventListener('click', async () => {
+      const role = accessFields.roleSelect.value;
+      const modulePermissions = accessFields.getPermissions();
+      if (role === 'vendas' && !modulePermissions.length) { toast('Selecione ao menos um módulo.', true); return; }
+      saveBtn.disabled = true;
+      try {
+        const { user: updated } = await api('/auth/users/' + user.id + '/access', {
+          method: 'PUT', body: { role, module_permissions: modulePermissions },
+        });
+        state.users = (state.users || []).map((item) => item.id === updated.id ? updated : item);
+        closeUserModal();
+        toast('Perfil e permissões atualizados.');
+      } catch (err) {
+        toast(err.message, true);
+        saveBtn.disabled = false;
+      }
+    });
+
+    const card = el('div', { class: 'modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Acesso de ' + user.name]),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeUserModal, html: icon('close') }),
+      ]),
+      el('div', { class: 'modal-body' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Perfil']), accessFields.roleSelect]),
+        el('div', { class: 'field' }, [el('label', {}, ['Módulos permitidos']), accessFields.permissionsBox, accessFields.hint]),
+      ]),
+      el('div', { class: 'modal-footer' }, [
+        el('button', { class: 'btn btn-ghost', onclick: closeUserModal }, ['Cancelar']),
+        saveBtn,
+      ]),
+    ]);
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (event) => { if (event.target === event.currentTarget) closeUserModal(); },
     }, [card]);
   }
 
@@ -2030,14 +2151,14 @@
         type: 'button', class: 'filter-chip' + (state.publicSitesNiche === niche ? ' active' : ''),
         onclick: () => { state.publicSitesNiche = state.publicSitesNiche === niche ? '' : niche; render(); },
       }, [niche]);
-      const removeBtn = el('button', {
+      const removeBtn = canAccessModule('systems') ? el('button', {
         type: 'button', class: 'filter-chip-delete', title: 'Excluir nicho ' + niche,
         'aria-label': 'Excluir nicho ' + niche,
         onclick: (event) => { event.stopPropagation(); deleteSystemOption('niches', niche); },
-      }, ['×']);
+      }, ['×']) : null;
       nicheBar.appendChild(el('div', { class: 'filter-chip-wrap' }, [nicheChip, removeBtn]));
     });
-    nicheBar.appendChild(el('button', {
+    if (canAccessModule('systems')) nicheBar.appendChild(el('button', {
       type: 'button', class: 'filter-chip add', onclick: () => createSystemOption('niches'),
     }, ['+ Novo nicho']));
     card.appendChild(nicheBar);

@@ -1,9 +1,11 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../auth');
+const { requireAnyModule } = require('../permissions');
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireAnyModule('dashboard'));
 
 // Express 4 não encaminha automaticamente rejeições de handlers async para o
 // middleware de erro — sem isso, um erro depois de um "await" faria a

@@ -4,9 +4,16 @@ const { requireAuth } = require('../auth');
 const { encrypt, decrypt } = require('../crypto');
 const { SYSTEM_CATEGORIES } = require('../categories');
 const { normalizeHttpUrl, isAllowedImageDataUrl } = require('../security');
+const { hasModuleAccess } = require('../permissions');
 
 const router = express.Router();
 router.use(requireAuth);
+router.use((req, res, next) => {
+  if (hasModuleAccess(req.user, 'systems')) return next();
+  const publicSitesRead = req.method === 'GET' && ['/options', '/public-preview'].includes(req.path);
+  if (publicSitesRead && hasModuleAccess(req.user, 'public_sites')) return next();
+  return res.status(403).json({ error: 'Seu perfil não possui acesso a este módulo.' });
+});
 
 // Express 4 não encaminha automaticamente rejeições de handlers async para o
 // middleware de erro — sem isso, um erro depois de um "await" faria a
@@ -265,6 +272,27 @@ router.get('/categories', ah(async (req, res) => {
     req.user.account_id
   );
   res.json({ categories: rows.map((item) => item.name) });
+}));
+
+router.get('/public-preview', ah(async (req, res) => {
+  const rows = await db.all(
+    'SELECT * FROM systems WHERE user_id = ? AND is_public = 1 ORDER BY id DESC',
+    req.user.account_id
+  );
+  const systems = rows.map((row) => {
+    const system = toPublic(row);
+    return {
+      id: system.id,
+      name: system.name,
+      url: system.url,
+      logo: system.logo,
+      categories: system.categories,
+      specifications: system.specifications,
+      is_public: true,
+      niche: system.niche,
+    };
+  });
+  res.json({ systems });
 }));
 
 router.post('/options/:kind', ah(async (req, res) => {
