@@ -1598,6 +1598,7 @@
     recusado: 'Recusado',
   };
   const CANDIDATE_STATUS_ORDER = ['novo', 'em_analise', 'entrevista', 'aprovado', 'recusado'];
+  const CANDIDATE_EXPERIENCE_OPTIONS = ['Estou começando', 'Até 1 ano', 'De 1 a 3 anos', 'Mais de 3 anos'];
 
   function buildCandidatesManager() {
     const wrap = el('div', { class: 'canvas-scroll' });
@@ -1759,7 +1760,7 @@
   }
 
   function openCandidateModal(candidate) {
-    state.candidateModal = { candidate };
+    state.candidateModal = { candidate, mode: 'view' };
     render();
   }
 
@@ -1799,6 +1800,7 @@
 
   function buildCandidateModal() {
     const candidate = state.candidateModal.candidate;
+    if (state.candidateModal.mode === 'edit') return buildCandidateEditModal(candidate);
     const statusSelect = el('select', {}, CANDIDATE_STATUS_ORDER.map((candidateStatus) =>
       el('option', {
         value: candidateStatus,
@@ -1842,6 +1844,11 @@
         el('h3', {}, ['Candidato: ' + candidate.name]),
         el('div', { class: 'modal-header-actions' }, [
           el('button', {
+            class: 'btn btn-ghost',
+            title: 'Editar dados do candidato',
+            onclick: () => { state.candidateModal.mode = 'edit'; render(); },
+          }, [el('span', { html: icon('edit') }), ' Editar']),
+          el('button', {
             class: 'btn btn-danger btn-icon',
             title: 'Excluir candidatura',
             onclick: () => deleteCandidate(candidate),
@@ -1851,6 +1858,98 @@
         ]),
       ]),
       body,
+    ]);
+
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (event) => { if (event.target === event.currentTarget) closeCandidateModal(); },
+    }, [card]);
+  }
+
+  function buildCandidateEditModal(candidate) {
+    const nameInput = el('input', { type: 'text', value: candidate.name, maxlength: '200', autocomplete: 'name' });
+    const whatsappInput = el('input', { type: 'text', value: candidate.whatsapp, maxlength: '40', autocomplete: 'tel' });
+    const emailInput = el('input', { type: 'email', value: candidate.email, maxlength: '320', autocomplete: 'email' });
+    const locationInput = el('input', { type: 'text', value: candidate.location, maxlength: '200' });
+    const instagramInput = el('input', { type: 'url', value: candidate.instagram_url, maxlength: '500', placeholder: 'https://instagram.com/usuario' });
+    const experienceSelect = el('select', {}, CANDIDATE_EXPERIENCE_OPTIONS.map((option) =>
+      el('option', { value: option, selected: option === candidate.prospecting_experience ? 'selected' : null }, [option])
+    ));
+    const commissionInput = el('input', {
+      type: 'number', min: '1', max: '100', step: '0.1', value: String(candidate.desired_commission),
+    });
+    const statusSelect = el('select', {}, CANDIDATE_STATUS_ORDER.map((candidateStatus) =>
+      el('option', {
+        value: candidateStatus,
+        selected: candidateStatus === candidate.status ? 'selected' : null,
+      }, [CANDIDATE_STATUS_LABELS[candidateStatus]])
+    ));
+    const motivationInput = el('textarea', { rows: '5', maxlength: '700' }, [candidate.motivation]);
+
+    const saveBtn = el('button', { class: 'btn btn-primary', type: 'button' }, ['Salvar alterações']);
+    saveBtn.addEventListener('click', async () => {
+      const payload = {
+        name: nameInput.value.trim(),
+        whatsapp: whatsappInput.value.trim(),
+        email: emailInput.value.trim(),
+        location: locationInput.value.trim(),
+        instagram_url: instagramInput.value.trim(),
+        prospecting_experience: experienceSelect.value,
+        desired_commission: Number(commissionInput.value),
+        motivation: motivationInput.value.trim(),
+        status: statusSelect.value,
+      };
+      if (!payload.name || !payload.whatsapp || !payload.email || !payload.location || !payload.instagram_url || !payload.motivation) {
+        toast('Preencha todos os dados obrigatórios do candidato.', true);
+        return;
+      }
+      if (!Number.isFinite(payload.desired_commission) || payload.desired_commission < 1 || payload.desired_commission > 100) {
+        toast('A comissão deve estar entre 1% e 100%.', true);
+        return;
+      }
+
+      saveBtn.disabled = true;
+      try {
+        const { candidate: updated } = await api('/candidates/' + candidate.id, {
+          method: 'PUT',
+          body: payload,
+        });
+        state.candidates = (state.candidates || []).map((item) => item.id === updated.id ? updated : item);
+        state.candidateModal = { candidate: updated, mode: 'view' };
+        render();
+        toast('Dados do candidato atualizados.');
+      } catch (err) {
+        toast(err.message, true);
+        saveBtn.disabled = false;
+      }
+    });
+
+    const fields = el('div', { class: 'candidate-edit-grid' }, [
+      el('div', { class: 'field' }, [el('label', {}, ['Nome completo']), nameInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['WhatsApp']), whatsappInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['E-mail']), emailInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Cidade / Estado']), locationInput]),
+      el('div', { class: 'field field-span-2' }, [el('label', {}, ['Instagram']), instagramInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Experiência com prospecção']), experienceSelect]),
+      el('div', { class: 'field' }, [el('label', {}, ['Comissão desejada (%)']), commissionInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Status']), statusSelect]),
+      el('div', { class: 'field field-span-2' }, [el('label', {}, ['Motivação']), motivationInput]),
+    ]);
+
+    const card = el('div', { class: 'modal-card view-modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Editar candidato']),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeCandidateModal, html: icon('close') }),
+      ]),
+      el('div', { class: 'modal-body candidate-edit-body' }, [fields]),
+      el('div', { class: 'modal-footer' }, [
+        el('button', {
+          class: 'btn btn-ghost',
+          type: 'button',
+          onclick: () => { state.candidateModal.mode = 'view'; render(); },
+        }, ['Cancelar']),
+        saveBtn,
+      ]),
     ]);
 
     return el('div', {

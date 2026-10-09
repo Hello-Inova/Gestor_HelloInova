@@ -50,6 +50,33 @@ function serializeCandidate(row) {
   };
 }
 
+function parseCandidateInput(body, { requireConsent = false } = {}) {
+  const name = trimText(body.name, 200);
+  const whatsapp = trimText(body.whatsapp, 40);
+  const email = trimText(body.email, 320).toLowerCase();
+  const location = trimText(body.location, 200);
+  const instagramUrl = trimText(body.instagram_url, 500);
+  const experience = trimText(body.prospecting_experience, 100);
+  const motivation = trimText(body.motivation, 700);
+  const commission = Number(body.desired_commission);
+
+  if (!name) return { error: 'Informe o nome completo.' };
+  if (!whatsapp) return { error: 'Informe o WhatsApp.' };
+  if (!EMAIL_RE.test(email)) return { error: 'E-mail inválido.' };
+  if (!location) return { error: 'Informe a cidade e o estado.' };
+  if (!validInstagramUrl(instagramUrl)) return { error: 'Informe um link válido do Instagram.' };
+  if (!VALID_EXPERIENCE.includes(experience)) return { error: 'Experiência com prospecção inválida.' };
+  if (!Number.isFinite(commission) || commission < 1 || commission > 100) {
+    return { error: 'A comissão deve estar entre 1% e 100%.' };
+  }
+  if (!motivation) return { error: 'Informe sua motivação.' };
+  if (requireConsent && body.consent !== true) return { error: 'É necessário aceitar o consentimento.' };
+
+  return {
+    data: { name, whatsapp, email, location, instagramUrl, experience, motivation, commission },
+  };
+}
+
 // CORS restrito às duas publicações oficiais do formulário. Requisições do
 // próprio Gestor não trazem Origin diferente e continuam funcionando.
 router.use((req, res, next) => {
@@ -79,33 +106,9 @@ router.post(
       return res.status(403).json({ error: 'Origem não autorizada.' });
     }
 
-    const body = req.body || {};
-    const name = trimText(body.name, 200);
-    const whatsapp = trimText(body.whatsapp, 40);
-    const email = trimText(body.email, 320).toLowerCase();
-    const location = trimText(body.location, 200);
-    const instagramUrl = trimText(body.instagram_url, 500);
-    const experience = trimText(body.prospecting_experience, 100);
-    const motivation = trimText(body.motivation, 700);
-    const commission = Number(body.desired_commission);
-
-    if (!name) return res.status(400).json({ error: 'Informe o nome completo.' });
-    if (!whatsapp) return res.status(400).json({ error: 'Informe o WhatsApp.' });
-    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
-    if (!location) return res.status(400).json({ error: 'Informe a cidade e o estado.' });
-    if (!validInstagramUrl(instagramUrl)) {
-      return res.status(400).json({ error: 'Informe um link válido do Instagram.' });
-    }
-    if (!VALID_EXPERIENCE.includes(experience)) {
-      return res.status(400).json({ error: 'Experiência com prospecção inválida.' });
-    }
-    if (!Number.isFinite(commission) || commission < 1 || commission > 100) {
-      return res.status(400).json({ error: 'A comissão deve estar entre 1% e 100%.' });
-    }
-    if (!motivation) return res.status(400).json({ error: 'Informe sua motivação.' });
-    if (body.consent !== true) {
-      return res.status(400).json({ error: 'É necessário aceitar o consentimento.' });
-    }
+    const parsed = parseCandidateInput(req.body || {}, { requireConsent: true });
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { name, whatsapp, email, location, instagramUrl, experience, motivation, commission } = parsed.data;
 
     const inserted = await db.run(
       `INSERT INTO candidates
@@ -141,16 +144,33 @@ router.put(
   '/:id',
   requireAuth,
   ah(async (req, res) => {
-    const candidate = await db.get('SELECT id FROM candidates WHERE id = ?', req.params.id);
+    const candidate = await db.get('SELECT * FROM candidates WHERE id = ?', req.params.id);
     if (!candidate) return res.status(404).json({ error: 'Candidato não encontrado.' });
 
-    const { status } = req.body || {};
+    const body = req.body || {};
+    const status = body.status === undefined ? candidate.status : body.status;
     if (!VALID_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'Status inválido.' });
     }
 
+    const parsed = parseCandidateInput({ ...candidate, ...body });
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { name, whatsapp, email, location, instagramUrl, experience, motivation, commission } = parsed.data;
+
     const updated = await db.run(
-      'UPDATE candidates SET status = ?, updated_at = NOW() WHERE id = ? RETURNING *',
+      `UPDATE candidates SET
+         name = ?, whatsapp = ?, email = ?, location = ?, instagram_url = ?,
+         prospecting_experience = ?, desired_commission = ?, motivation = ?,
+         status = ?, updated_at = NOW()
+       WHERE id = ? RETURNING *`,
+      name,
+      whatsapp,
+      email,
+      location,
+      instagramUrl,
+      experience,
+      commission,
+      motivation,
       status,
       candidate.id
     );

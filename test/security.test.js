@@ -76,3 +76,27 @@ test('middleware bloqueia mutação cross-site e conteúdo não JSON', () => {
   );
   assert.equal(formRes.statusCode, 415);
 });
+
+test('exceção CORS de candidatos vale somente para o cadastro público', () => {
+  let publicPostAllowed = false;
+  protectUnsafeRequests(
+    request(
+      { origin: 'https://formulario.externo', host: 'gestor.exemplo.com', 'content-type': 'application/json' },
+      { method: 'POST', path: '/api/candidates' }
+    ),
+    response(),
+    () => { publicPostAllowed = true; }
+  );
+  assert.equal(publicPostAllowed, true);
+
+  const adminEditRes = response();
+  protectUnsafeRequests(
+    request(
+      { origin: 'https://ataque.exemplo', host: 'gestor.exemplo.com', 'content-type': 'application/json' },
+      { method: 'PUT', path: '/api/candidates/1' }
+    ),
+    adminEditRes,
+    () => {}
+  );
+  assert.equal(adminEditRes.statusCode, 403);
+});

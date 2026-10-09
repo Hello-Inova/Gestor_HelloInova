@@ -1811,6 +1811,15 @@ button { font-family: inherit; }
 .candidate-status-badge.status-aprovado { background: rgba(47, 224, 160, 0.14); color: var(--success); border-color: rgba(47, 224, 160, 0.35); }
 .candidate-status-badge.status-recusado { background: rgba(255, 84, 112, 0.12); color: var(--danger); border-color: rgba(255, 84, 112, 0.3); }
 
+.candidate-edit-body { overflow-y: auto; }
+.candidate-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+.candidate-edit-grid .field-span-2 { grid-column: 1 / -1; }
+.candidate-edit-grid textarea { min-height: 118px; resize: vertical; }
+
 .candidate-grid-empty {
   padding: 42px 22px;
   color: var(--text-2);
@@ -1819,6 +1828,8 @@ button { font-family: inherit; }
 }
 
 @media (max-width: 760px) {
+  .candidate-edit-grid { grid-template-columns: 1fr; }
+  .candidate-edit-grid .field-span-2 { grid-column: auto; }
   .candidate-grid-scroll { overflow: visible; border: 0; background: transparent; }
   .candidate-grid { min-width: 0; }
   .candidate-grid-header { display: none; }

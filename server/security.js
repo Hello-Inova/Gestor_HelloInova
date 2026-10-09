@@ -29,7 +29,7 @@ function isSameOrigin(req) {
 
 function protectUnsafeRequests(req, res, next) {
   if (SAFE_METHODS.has(req.method)) return next();
-  if (req.path.startsWith('/api/candidates')) return next();
+  if (req.method === 'POST' && ['/api/candidates', '/api/candidates/'].includes(req.path)) return next();
   if (!isSameOrigin(req)) {
     return res.status(403).json({ error: 'Origem da requisição não permitida.' });
   }
