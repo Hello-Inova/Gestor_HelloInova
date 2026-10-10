@@ -1923,7 +1923,7 @@
       ]),
     ]);
 
-    const card = el('div', { class: 'modal-card view-modal-card' }, [
+    const card = el('div', { class: 'modal-card view-modal-card lead-view-modal-card' }, [
       el('div', { class: 'modal-header' }, [
         el('h3', {}, ['Lead: ' + lead.name]),
         el('div', { class: 'modal-header-actions' }, [

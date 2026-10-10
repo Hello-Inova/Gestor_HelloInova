@@ -1508,6 +1508,21 @@ button { font-family: inherit; }
   flex-direction: column;
 }
 .view-modal-card .modal-body { flex: 1; }
+.lead-view-modal-card .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, rgba(17, 22, 38, .98), rgba(11, 16, 29, .98));
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .24);
+}
+.lead-view-modal-card .modal-header h3 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .view-modal-body { padding: 26px 28px; }
 .view-modal-top {
   display: flex;
