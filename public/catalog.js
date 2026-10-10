@@ -9,6 +9,7 @@
   const slug = window.location.pathname.split('/').filter(Boolean).pop() || '';
   let products = [];
   let activeCategory = '';
+  let mobileScrollObserver = null;
   let lightbox = null;
   let lightboxImages = [];
   let lightboxIndex = 0;
@@ -112,20 +113,31 @@
 
   function updateMobileScrollWindow() {
     const cards = [...grid.querySelectorAll('.catalog-card')];
-    const mobile = window.matchMedia('(max-width: 768px)').matches;
-    grid.classList.remove('mobile-two-row-scroll');
-    grid.style.removeProperty('max-height');
-    grid.removeAttribute('tabindex');
-    grid.removeAttribute('aria-label');
-    if (!mobile || cards.length <= 2) return;
-    requestAnimationFrame(() => {
-      const rowGap = parseFloat(getComputedStyle(grid).rowGap) || 12;
-      const height = cards[0].offsetHeight + cards[1].offsetHeight + rowGap;
-      grid.style.maxHeight = Math.ceil(height) + 'px';
-      grid.classList.add('mobile-two-row-scroll');
+    const shouldScroll = window.matchMedia('(max-width: 768px)').matches && cards.length > 2;
+    if (mobileScrollObserver) {
+      mobileScrollObserver.disconnect();
+      mobileScrollObserver = null;
+    }
+    grid.classList.toggle('mobile-two-row-scroll', shouldScroll);
+    if (shouldScroll) {
       grid.tabIndex = 0;
-      grid.setAttribute('aria-label', 'Lista de soluções com rolagem');
-    });
+      grid.setAttribute('aria-label', 'Lista de soluções com rolagem vertical');
+      const setScrollHeight = () => {
+        const gap = parseFloat(getComputedStyle(grid).rowGap || getComputedStyle(grid).gap) || 12;
+        const height = cards[0].getBoundingClientRect().height + cards[1].getBoundingClientRect().height + gap;
+        grid.style.setProperty('--mobile-scroll-height', Math.ceil(height) + 'px');
+      };
+      requestAnimationFrame(setScrollHeight);
+      if ('ResizeObserver' in window) {
+        mobileScrollObserver = new ResizeObserver(setScrollHeight);
+        mobileScrollObserver.observe(cards[0]);
+        mobileScrollObserver.observe(cards[1]);
+      }
+    } else {
+      grid.removeAttribute('tabindex');
+      grid.removeAttribute('aria-label');
+      grid.style.removeProperty('--mobile-scroll-height');
+    }
   }
 
   function openProduct(product) {
