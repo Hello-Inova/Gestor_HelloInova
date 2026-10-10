@@ -10,6 +10,7 @@
   let products = [];
   let activeCategory = '';
   let mobileScrollObserver = null;
+  let productDialogTrigger = null;
   let lightbox = null;
   let lightboxImages = [];
   let lightboxIndex = 0;
@@ -51,6 +52,9 @@
 
   function buildCard(product) {
     const card = node('article', 'catalog-card');
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', 'Visualizar todos os dados de ' + product.name);
     const imageWrap = node('div', 'catalog-card-image');
     const media = mediaForProduct(product);
     const coverImage = product.logo || media[0];
@@ -65,19 +69,6 @@
     } else {
       imageWrap.appendChild(node('span', 'catalog-card-fallback', (product.name || '?').charAt(0).toUpperCase()));
     }
-    if (media.length) {
-      imageWrap.classList.add('expandable');
-      imageWrap.tabIndex = 0;
-      imageWrap.setAttribute('role', 'button');
-      imageWrap.setAttribute('aria-label', 'Ampliar imagens de ' + product.name);
-      imageWrap.addEventListener('click', () => openImageLightbox(media, 0, product.name));
-      imageWrap.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          openImageLightbox(media, 0, product.name);
-        }
-      });
-    }
     const body = node('div', 'catalog-card-body');
     body.appendChild(node('span', 'catalog-card-category', product.category || 'Solução digital'));
     body.appendChild(node('h3', '', product.name));
@@ -88,9 +79,19 @@
     const button = node('a', 'catalog-details-button', 'Ver detalhes ↗');
     button.href = product.detail_url || '/captacao';
     button.setAttribute('aria-label', 'Ver detalhes de ' + product.name);
+    button.addEventListener('click', (event) => event.stopPropagation());
     footer.append(price, button);
     body.appendChild(footer);
     card.append(imageWrap, body);
+    card.addEventListener('click', (event) => {
+      if (event.target.closest('a, button')) return;
+      openProduct(product, card);
+    });
+    card.addEventListener('keydown', (event) => {
+      if (event.target !== card || (event.key !== 'Enter' && event.key !== ' ')) return;
+      event.preventDefault();
+      openProduct(product, card);
+    });
     return card;
   }
 
@@ -140,7 +141,8 @@
     }
   }
 
-  function openProduct(product) {
+  function openProduct(product, trigger) {
+    productDialogTrigger = trigger || document.activeElement;
     dialog.innerHTML = '';
     const card = node('div', 'product-dialog-card');
     const close = node('button', 'dialog-close', '×');
@@ -197,17 +199,22 @@
 
     const content = node('div', 'dialog-content');
     content.appendChild(node('span', 'catalog-card-category', product.category || 'Solução digital'));
-    content.appendChild(node('h2', '', product.name));
+    const title = node('h2', '', product.name);
+    title.id = 'product-dialog-title';
+    content.appendChild(title);
     if (product.summary) content.appendChild(node('p', 'dialog-summary', product.summary));
     if (product.details) content.appendChild(node('div', 'dialog-details', product.details));
     const price = node('div', 'dialog-price', priceLabel(product));
     if (product.price_details) price.appendChild(node('small', '', product.price_details));
     content.appendChild(price);
     const contact = node('a', 'dialog-cta', 'Quero saber mais ↗');
-    contact.href = '/captacao';
+    contact.href = product.detail_url || '/captacao';
     content.appendChild(contact);
     card.append(gallery, content);
     dialog.appendChild(card);
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'product-dialog-title');
     dialog.hidden = false;
     document.body.style.overflow = 'hidden';
     close.focus();
@@ -217,6 +224,8 @@
     dialog.hidden = true;
     dialog.innerHTML = '';
     document.body.style.overflow = '';
+    if (productDialogTrigger && document.contains(productDialogTrigger)) productDialogTrigger.focus();
+    productDialogTrigger = null;
   }
 
   function ensureImageLightbox() {

@@ -244,6 +244,10 @@ body {
 .footer-contact-icon { display: grid; place-items: center; width: 34px; height: 34px; color: var(--blue-light); border: 1px solid rgba(96,140,255,.22); border-radius: 10px; background: rgba(47,123,255,.08); }
 .footer-contact-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .footer-contact-icon svg .icon-fill { fill: currentColor; stroke: none; }
+.footer-contact-icon svg.brand-icon { fill: currentColor; stroke: none; }
+.footer-contact-icon.whatsapp { color: #25d366; border-color: rgba(37,211,102,.28); background: rgba(37,211,102,.08); }
+.footer-contact-icon.instagram { color: #e4405f; border-color: rgba(228,64,95,.28); background: rgba(228,64,95,.08); }
+.footer-contact-icon.email { color: #67a1ff; }
 .footer-contact-label { color: #71809e; font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
 .footer-contact-column a { color: #cbd5e9; text-decoration: none; font-size: 13px; line-height: 1.5; transition: color .2s; }
 .footer-contact-column a:hover { color: var(--blue-light); }
