@@ -47,7 +47,7 @@ body {
   box-shadow: 22px 0 70px rgba(0,0,0,.18);
   backdrop-filter: blur(24px);
 }
-.public-nav { display: grid; gap: 8px; margin-top: 64px; }
+.public-nav { display: grid; gap: 8px; margin-top: 88px; }
 .public-nav a {
   display: flex;
   align-items: center;
@@ -64,28 +64,41 @@ body {
 .public-nav a span { width: 20px; color: var(--blue-light); font-size: 18px; text-align: center; }
 .public-nav a:hover { color: white; transform: translateX(3px); }
 .public-nav a.active { color: white; border-color: rgba(96,140,255,.22); background: rgba(47,123,255,.1); }
-.sidebar-contact { margin-top: auto; padding: 17px; border: 1px solid rgba(96,140,255,.2); border-radius: 16px; background: linear-gradient(145deg, rgba(47,123,255,.13), rgba(10,13,22,.72)); }
-.sidebar-contact p { margin: 0 0 15px; color: #c8d2e7; font-size: 12px; line-height: 1.55; }
-.sidebar-contact a,
-.hero-contact {
+.public-nav-contact {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  padding: 11px 16px;
   color: white;
-  background: linear-gradient(135deg, #123fd6, var(--blue));
-  border-radius: 10px;
+  border: 1px solid rgba(87,143,255,.42);
+  border-radius: 12px;
+  background: rgba(40,116,255,.14);
   text-decoration: none;
+  font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 12px 32px rgba(22,87,255,.28);
+  box-shadow: 0 12px 32px rgba(22,87,255,.18);
   transition: transform .2s, box-shadow .2s;
 }
-.sidebar-contact a { width: 100%; padding: 11px 14px; font-size: 13px; }
-.sidebar-contact a:hover,
-.hero-contact:hover { transform: translateY(-2px); box-shadow: 0 17px 38px rgba(22,87,255,.4); }
+.public-nav-contact:hover { transform: translateY(-2px); box-shadow: 0 17px 38px rgba(22,87,255,.32); }
 .public-menu-toggle,
-.public-menu-overlay,
-.public-hero-nav { display: none; }
+.public-menu-overlay { display: none; }
+.public-hero-nav {
+  position: fixed;
+  z-index: 11;
+  top: 0;
+  right: 0;
+  left: 264px;
+  display: flex;
+  min-height: 78px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px max(24px, calc((100vw - 264px - 1180px)/2));
+  border-bottom: 1px solid rgba(96,140,255,.16);
+  background: rgba(5,7,12,.78);
+  box-shadow: 0 12px 36px rgba(0,0,0,.14);
+  backdrop-filter: blur(18px);
+}
 .public-header {
   min-height: 640px;
   padding: 34px max(24px, calc((100vw - 264px - 1180px)/2));
@@ -139,10 +152,6 @@ body {
   font-size: 18px;
   animation: premium-rise .9s cubic-bezier(.16,1,.3,1) .25s both;
 }
-.public-hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; animation: premium-rise .9s cubic-bezier(.16,1,.3,1) .36s both; }
-.hero-contact { min-width: 142px; padding: 13px 20px; font-size: 14px; }
-.hero-projects { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 18px; color: #d7e3f8; border: 1px solid rgba(96,140,255,.3); border-radius: 10px; background: rgba(12,16,27,.46); text-decoration: none; font-size: 14px; font-weight: 600; backdrop-filter: blur(12px); transition: border-color .2s, background .2s; }
-.hero-projects:hover { border-color: rgba(110,175,255,.6); background: rgba(47,123,255,.1); }
 .public-main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 54px 0 90px; }
 .public-section-heading { max-width: 760px; margin-bottom: 36px; }
 .public-section-heading > span { color: var(--blue-light); font-size: 11px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; }
@@ -253,20 +262,10 @@ body {
   .public-menu-toggle,
   .public-menu-overlay { display: none !important; }
   .public-hero-nav {
-    position: fixed;
-    z-index: 11;
-    top: 0;
-    right: 0;
     left: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     min-height: 72px;
     padding: 12px 20px;
-    border-bottom: 1px solid rgba(96,140,255,.16);
     background: linear-gradient(180deg, rgba(5,7,12,.9), rgba(5,7,12,.66));
-    box-shadow: 0 12px 36px rgba(0,0,0,.14);
-    backdrop-filter: blur(18px);
     transition: background .25s, border-color .25s;
   }
   .public-brand-mobile { display: inline-flex; }
@@ -287,8 +286,7 @@ body {
   .public-hero { padding: 58px 0 30px; }
   .public-hero h1 { font-size: clamp(30px, 10vw, 42px); letter-spacing: -1px; }
   .public-hero p { font-size: 15px; }
-  .public-hero-actions { margin-top: 26px; }
-  .hero-contact, .hero-projects { flex: 1 1 145px; }
+  .public-nav-contact { padding: 9px 12px; font-size: 12px; }
   .public-main { width: 100%; padding: 28px 20px 54px; overflow: hidden; }
   .public-section-heading { margin-bottom: 28px; }
   .public-section-heading h2 { font-size: 28px; letter-spacing: -.8px; }
