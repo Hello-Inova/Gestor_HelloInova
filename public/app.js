@@ -41,7 +41,7 @@
     candidatesFilterStatus: [],
     candidateModal: null,
     products: null,
-    productOptions: { public_url: '' },
+    productOptions: { public_url: '', links: [] },
     productSearch: '',
     productCategory: '',
     productModal: null,
@@ -323,7 +323,7 @@
       if (!canAccessModule('catalog')) return;
       state.productOptions = await api('/products/options');
     } catch (err) {
-      state.productOptions = { public_url: '' };
+      state.productOptions = { public_url: '', links: [] };
     }
   }
 
@@ -2414,6 +2414,9 @@
           el('span', { class: 'category-badge ' + (product.is_public ? 'status-public' : 'muted') }, [
             product.is_public ? 'Publicado' : 'Privado',
           ]),
+          product.detail_link_name ? el('span', { class: 'category-badge product-destination-badge' }, [
+            el('span', { html: icon('link') }), product.detail_link_name,
+          ]) : null,
         ]),
         el('h3', {}, [product.name]),
         el('p', {}, [product.summary || 'Sem resumo cadastrado.']),
@@ -2483,6 +2486,57 @@
     const publicInput = el('input', { type: 'checkbox', checked: product.is_public ? true : null });
     const imageInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: true });
     const imageGrid = el('div', { class: 'product-image-editor-grid' });
+    const availableLinks = Array.isArray(state.productOptions.links) ? state.productOptions.links.slice() : [];
+    const selectedLinkId = product.detail_link_id || (availableLinks[0] && availableLinks[0].id) || '';
+    const linkSelect = el('select', { 'aria-label': 'Link de destino do botão Ver detalhes' });
+    availableLinks.forEach((link) => linkSelect.appendChild(el('option', {
+      value: String(link.id), selected: Number(link.id) === Number(selectedLinkId) ? true : null,
+    }, [link.name + ' — ' + link.url])));
+    if (!availableLinks.length) linkSelect.appendChild(el('option', { value: '' }, ['Nenhum link cadastrado']));
+
+    const newLinkNameInput = el('input', { type: 'text', maxlength: '120', placeholder: 'Ex.: Página de orçamento' });
+    const newLinkUrlInput = el('input', { type: 'url', maxlength: '2000', placeholder: 'https://... ou /captacao' });
+    const newLinkPanel = el('div', { class: 'product-new-link-panel', hidden: true }, []);
+    const toggleNewLinkButton = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, [
+      el('span', { html: icon('plus') }), ' Novo link',
+    ]);
+    const createLinkButton = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, ['Cadastrar e selecionar']);
+    const cancelLinkButton = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, ['Cancelar']);
+    newLinkPanel.append(
+      el('div', { class: 'field' }, [el('label', {}, ['Nome do link']), newLinkNameInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['Endereço do link']), newLinkUrlInput]),
+      el('div', { class: 'product-new-link-actions' }, [cancelLinkButton, createLinkButton])
+    );
+    toggleNewLinkButton.addEventListener('click', () => {
+      newLinkPanel.hidden = false;
+      newLinkNameInput.focus();
+    });
+    cancelLinkButton.addEventListener('click', () => { newLinkPanel.hidden = true; });
+    createLinkButton.addEventListener('click', async () => {
+      const name = newLinkNameInput.value.trim();
+      const url = newLinkUrlInput.value.trim();
+      if (!name || !url) { toast('Informe o nome e o endereço do novo link.', true); return; }
+      createLinkButton.disabled = true;
+      try {
+        const response = await api('/products/links', { method: 'POST', body: { name, url } });
+        const links = Array.isArray(state.productOptions.links) ? state.productOptions.links : [];
+        links.push(response.link);
+        links.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+        state.productOptions.links = links;
+        const emptyOption = linkSelect.querySelector('option[value=""]');
+        if (emptyOption) emptyOption.remove();
+        linkSelect.appendChild(el('option', { value: String(response.link.id) }, [response.link.name + ' — ' + response.link.url]));
+        linkSelect.value = String(response.link.id);
+        newLinkNameInput.value = '';
+        newLinkUrlInput.value = '';
+        newLinkPanel.hidden = true;
+        toast('Link cadastrado e selecionado.');
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        createLinkButton.disabled = false;
+      }
+    });
 
     const renderImages = () => {
       imageGrid.innerHTML = '';
@@ -2522,6 +2576,8 @@
       if (!name) { toast('Informe o nome da solução.', true); return; }
       const price = priceInput.value === '' ? null : Number(priceInput.value);
       if (price !== null && (!Number.isFinite(price) || price < 0)) { toast('Informe um valor válido.', true); return; }
+      const detailLinkId = Number(linkSelect.value);
+      if (!Number.isInteger(detailLinkId) || detailLinkId < 1) { toast('Selecione ou cadastre o link de destino.', true); return; }
       saveButton.disabled = true;
       try {
         const body = {
@@ -2534,6 +2590,7 @@
           price_details: priceDetailsInput.value.trim(),
           images,
           is_public: publicInput.checked,
+          detail_link_id: detailLinkId,
         };
         const response = editing
           ? await api('/products/' + product.id, { method: 'PUT', body })
@@ -2563,6 +2620,12 @@
         el('div', { class: 'field field-span-2' }, [el('label', {}, ['Detalhes da solução']), detailsInput]),
         el('div', { class: 'field' }, [el('label', {}, ['Valor (R$)']), priceInput]),
         el('div', { class: 'field' }, [el('label', {}, ['Complemento do valor']), priceDetailsInput]),
+        el('div', { class: 'field field-span-2 product-link-field' }, [
+          el('label', {}, ['Destino do botão "Ver detalhes"']),
+          el('div', { class: 'product-link-picker' }, [linkSelect, toggleNewLinkButton]),
+          el('div', { class: 'field-hint' }, ['O visitante será direcionado para este link ao clicar em "Ver detalhes".']),
+          newLinkPanel,
+        ]),
         el('div', { class: 'field field-span-2' }, [
           el('label', {}, ['Imagens da solução']),
           imageGrid,

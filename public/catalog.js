@@ -75,9 +75,9 @@
     const footer = node('div', 'catalog-card-footer');
     const price = node('div', 'catalog-price', priceLabel(product));
     if (product.price_details) price.appendChild(node('small', '', product.price_details));
-    const button = node('button', 'catalog-details-button', 'Ver detalhes');
-    button.type = 'button';
-    button.addEventListener('click', () => openProduct(product));
+    const button = node('a', 'catalog-details-button', 'Ver detalhes ↗');
+    button.href = product.detail_url || '/captacao';
+    button.setAttribute('aria-label', 'Ver detalhes de ' + product.name);
     footer.append(price, button);
     body.appendChild(footer);
     card.append(imageWrap, body);

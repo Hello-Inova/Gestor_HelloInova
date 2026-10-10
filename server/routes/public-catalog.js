@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { isAllowedImageDataUrl } = require('../security');
+const { isAllowedImageDataUrl, normalizeCatalogDestinationUrl } = require('../security');
 
 const router = express.Router();
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -26,8 +26,11 @@ router.get('/:slug', ah(async (req, res) => {
   const account = await db.get('SELECT id, name FROM users WHERE public_slug = ? AND id = account_id', slug);
   if (!account) return res.status(404).json({ error: 'Catálogo não encontrado.' });
   const rows = await db.all(
-    `SELECT id, name, category, summary, details, price, price_details, images, updated_at
-       FROM products WHERE user_id = ? AND is_public = 1 ORDER BY name ASC`,
+    `SELECT p.id, p.name, p.category, p.summary, p.details, p.price, p.price_details,
+            p.images, p.updated_at, l.url AS detail_url
+       FROM products p
+       LEFT JOIN product_catalog_links l ON l.id = p.detail_link_id AND l.user_id = p.user_id
+      WHERE p.user_id = ? AND p.is_public = 1 ORDER BY p.name ASC`,
     account.id
   );
   res.json({
@@ -41,6 +44,7 @@ router.get('/:slug', ah(async (req, res) => {
       price: row.price === null || row.price === undefined ? null : Number(row.price),
       price_details: row.price_details || '',
       images: parseImages(row.images),
+      detail_url: normalizeCatalogDestinationUrl(row.detail_url) || '/captacao',
       updated_at: row.updated_at,
     })),
   });

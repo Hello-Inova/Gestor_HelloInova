@@ -63,6 +63,22 @@ function normalizeHttpUrl(value, { required = false } = {}) {
   }
 }
 
+function normalizeCatalogDestinationUrl(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2000 || /[\u0000-\u001f\\]/.test(trimmed)) return null;
+  if (trimmed.startsWith('//')) return null;
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    try {
+      const parsed = new URL(trimmed, 'https://catalog.local');
+      return parsed.pathname + parsed.search + parsed.hash;
+    } catch {
+      return null;
+    }
+  }
+  return normalizeHttpUrl(trimmed, { required: true });
+}
+
 function isAllowedImageDataUrl(value) {
   return typeof value === 'string' && ALLOWED_IMAGE_DATA_URL.test(value);
 }
@@ -72,6 +88,7 @@ module.exports = {
   protectUnsafeRequests,
   validatePassword,
   normalizeHttpUrl,
+  normalizeCatalogDestinationUrl,
   isAllowedImageDataUrl,
   isSameOrigin,
 };

@@ -219,6 +219,18 @@ const SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS products_user_id_idx ON products(user_id);
 
+  CREATE TABLE IF NOT EXISTS product_catalog_links (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, name)
+  );
+  CREATE INDEX IF NOT EXISTS product_catalog_links_user_id_idx ON product_catalog_links(user_id);
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_link_id INTEGER REFERENCES product_catalog_links(id) ON DELETE SET NULL;
+
   -- Candidatos à vaga de SDR recebidos pelo formulário público externo.
   -- Mantemos os dados de recrutamento separados dos leads comerciais para
   -- que cada módulo tenha seu próprio fluxo e status.

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   validatePassword,
   normalizeHttpUrl,
+  normalizeCatalogDestinationUrl,
   isAllowedImageDataUrl,
   isSameOrigin,
   protectUnsafeRequests,
@@ -43,6 +44,14 @@ test('URLs são limitadas a HTTP e HTTPS', () => {
   assert.equal(normalizeHttpUrl('javascript:alert(1)'), null);
   assert.equal(normalizeHttpUrl('data:text/html,test'), null);
   assert.equal(normalizeHttpUrl('', { required: true }), null);
+});
+
+test('destinos do catálogo aceitam HTTP/HTTPS e caminhos internos seguros', () => {
+  assert.equal(normalizeCatalogDestinationUrl('/captacao?produto=site'), '/captacao?produto=site');
+  assert.equal(normalizeCatalogDestinationUrl('hello-inova.com/contato'), 'https://hello-inova.com/contato');
+  assert.equal(normalizeCatalogDestinationUrl('javascript:alert(1)'), null);
+  assert.equal(normalizeCatalogDestinationUrl('//site-malicioso.test'), null);
+  assert.equal(normalizeCatalogDestinationUrl('/rota\\maliciosa'), null);
 });
 
 test('uploads de imagem aceitam apenas formatos raster conhecidos', () => {

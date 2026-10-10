@@ -111,7 +111,7 @@ a { color: inherit; }
 .catalog-card-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 22px; }
 .catalog-price { display: flex; flex-direction: column; color: #fff; font-size: 17px; font-weight: 800; }
 .catalog-price small { max-width: 160px; margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 500; }
-.catalog-details-button { padding: 10px 13px; border: 1px solid rgba(76,136,255,.42); border-radius: 10px; background: rgba(40,116,255,.12); color: var(--blue-light); cursor: pointer; font: 700 11px var(--body); }
+.catalog-details-button { display: inline-flex; align-items: center; padding: 10px 13px; border: 1px solid rgba(76,136,255,.42); border-radius: 10px; background: rgba(40,116,255,.12); color: var(--blue-light); cursor: pointer; font: 700 11px var(--body); text-decoration: none; }
 .catalog-footer { display: flex; justify-content: space-between; gap: 40px; padding: 54px clamp(22px, 7vw, 110px); border-top: 1px solid var(--line); background: #02050c; }
 .footer-brand { display: flex; align-items: center; gap: 13px; }
 .footer-brand img { width: 48px; height: 48px; object-fit: contain; }
