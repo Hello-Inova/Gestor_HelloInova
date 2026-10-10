@@ -1236,7 +1236,7 @@ button { font-family: inherit; }
   .sysmgr-row-main-actions .btn { width: 100%; }
   .sysmgr-card.grow .leads-list {
     flex: 0 0 auto;
-    max-height: 280px;
+    max-height: 426px;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 5px;
