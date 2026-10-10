@@ -97,6 +97,7 @@ a { color: inherit; }
 .catalog-card:hover { transform: translateY(-6px); border-color: rgba(77,137,255,.5); box-shadow: 0 28px 64px rgba(0,0,0,.34); }
 .catalog-card-image { position: relative; height: 230px; overflow: hidden; background: radial-gradient(circle at 50% 30%, rgba(45,116,255,.26), transparent 68%), #07101f; }
 .catalog-card-image img { width: 100%; height: 100%; object-fit: cover; transition: transform .45s ease; }
+.catalog-card-image.has-logo img { padding: 28px; object-fit: contain; }
 .catalog-card-image.expandable,
 .dialog-main-image.expandable { cursor: zoom-in; }
 .catalog-card-image.expandable:focus-visible,

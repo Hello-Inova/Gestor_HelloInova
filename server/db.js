@@ -212,12 +212,14 @@ const SCHEMA_SQL = `
     observations TEXT DEFAULT '',
     price NUMERIC(12,2),
     price_details TEXT DEFAULT '',
+    logo TEXT DEFAULT '',
     images TEXT NOT NULL DEFAULT '[]',
     is_public INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
   CREATE INDEX IF NOT EXISTS products_user_id_idx ON products(user_id);
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS logo TEXT DEFAULT '';
 
   CREATE TABLE IF NOT EXISTS product_catalog_links (
     id SERIAL PRIMARY KEY,

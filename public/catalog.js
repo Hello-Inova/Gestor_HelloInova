@@ -26,6 +26,12 @@
     return Number(product.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
+  function mediaForProduct(product) {
+    const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+    if (!product.logo) return images;
+    return [product.logo, ...images.filter((image) => image !== product.logo)];
+  }
+
   function renderFilters() {
     const categories = [...new Set(products.map((product) => product.category).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
@@ -45,26 +51,29 @@
   function buildCard(product) {
     const card = node('article', 'catalog-card');
     const imageWrap = node('div', 'catalog-card-image');
-    if (product.images && product.images.length) {
+    const media = mediaForProduct(product);
+    const coverImage = product.logo || media[0];
+    if (coverImage) {
       const image = document.createElement('img');
-      image.src = product.images[0];
-      image.alt = product.name;
+      image.src = coverImage;
+      image.alt = product.logo ? 'Logo de ' + product.name : product.name;
       image.loading = 'lazy';
       imageWrap.appendChild(image);
-      if (product.images.length > 1) imageWrap.appendChild(node('span', 'catalog-card-image-count', product.images.length + ' imagens'));
+      if (product.logo) imageWrap.classList.add('has-logo');
+      if (media.length > 1) imageWrap.appendChild(node('span', 'catalog-card-image-count', media.length + ' imagens'));
     } else {
       imageWrap.appendChild(node('span', 'catalog-card-fallback', (product.name || '?').charAt(0).toUpperCase()));
     }
-    if (product.images && product.images.length) {
+    if (media.length) {
       imageWrap.classList.add('expandable');
       imageWrap.tabIndex = 0;
       imageWrap.setAttribute('role', 'button');
       imageWrap.setAttribute('aria-label', 'Ampliar imagens de ' + product.name);
-      imageWrap.addEventListener('click', () => openImageLightbox(product.images, 0, product.name));
+      imageWrap.addEventListener('click', () => openImageLightbox(media, 0, product.name));
       imageWrap.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          openImageLightbox(product.images, 0, product.name);
+          openImageLightbox(media, 0, product.name);
         }
       });
     }
@@ -110,7 +119,7 @@
 
     const gallery = node('div', 'dialog-gallery');
     const main = node('div', 'dialog-main-image');
-    const images = product.images || [];
+    const images = mediaForProduct(product);
     let selectedImageIndex = 0;
     const mainImage = document.createElement('img');
     if (images.length) {

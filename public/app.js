@@ -2398,11 +2398,12 @@
   }
 
   function buildProductManagerCard(product) {
-    const image = product.images && product.images[0]
-      ? el('img', { src: product.images[0], alt: product.name })
+    const coverImage = product.logo || (product.images && product.images[0]);
+    const image = coverImage
+      ? el('img', { src: coverImage, alt: product.logo ? 'Logo de ' + product.name : product.name })
       : el('span', { class: 'product-manager-fallback', html: icon('image') });
     return el('article', { class: 'product-manager-card' }, [
-      el('div', { class: 'product-manager-image' }, [
+      el('div', { class: 'product-manager-image' + (product.logo ? ' has-logo' : '') }, [
         image,
         product.images && product.images.length > 1
           ? el('span', { class: 'product-image-count' }, [String(product.images.length) + ' imagens'])
@@ -2474,6 +2475,7 @@
     const modal = state.productModal;
     const editing = modal.mode === 'edit';
     const product = editing ? modal.product : {};
+    let logo = typeof product.logo === 'string' ? product.logo : '';
     let images = Array.isArray(product.images) ? product.images.slice(0, 5) : [];
 
     const nameInput = el('input', { type: 'text', maxlength: '200', value: product.name || '', placeholder: 'Ex.: Site institucional premium' });
@@ -2486,6 +2488,8 @@
       rows: '3', maxlength: '600', placeholder: 'Ex.: A partir de R$ 1.500\nPagamento único\nInclui suporte por 30 dias',
     }, [product.price_details || '']);
     const publicInput = el('input', { type: 'checkbox', checked: product.is_public ? true : null });
+    const logoInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif' });
+    const logoPreview = el('div', { class: 'product-logo-editor-preview' });
     const imageInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: true });
     const imageGrid = el('div', { class: 'product-image-editor-grid' });
     const availableLinks = Array.isArray(state.productOptions.links) ? state.productOptions.links.slice() : [];
@@ -2540,6 +2544,37 @@
       }
     });
 
+    const renderLogo = () => {
+      logoPreview.innerHTML = '';
+      if (logo) {
+        logoPreview.appendChild(el('div', { class: 'product-logo-editor-item' }, [
+          el('img', { src: logo, alt: 'Logo da solução' }),
+          el('button', {
+            type: 'button', title: 'Remover logo', 'aria-label': 'Remover logo',
+            onclick: () => { logo = ''; logoInput.value = ''; renderLogo(); },
+          }, ['×']),
+        ]));
+      } else {
+        logoPreview.appendChild(el('div', { class: 'product-logo-editor-empty' }, [
+          el('span', { html: icon('image') }),
+          el('span', {}, ['Nenhum logo cadastrado', el('small', {}, ['A primeira imagem será usada como capa.'])]),
+        ]));
+      }
+    };
+    renderLogo();
+
+    logoInput.addEventListener('change', async () => {
+      const file = logoInput.files && logoInput.files[0];
+      if (!file) return;
+      try {
+        logo = await readProductImage(file);
+        renderLogo();
+      } catch (err) {
+        logoInput.value = '';
+        toast(err.message, true);
+      }
+    });
+
     const renderImages = () => {
       imageGrid.innerHTML = '';
       images.forEach((image, index) => imageGrid.appendChild(el('div', { class: 'product-image-editor-item' }, [
@@ -2590,6 +2625,7 @@
           observations: observationsInput.value.trim(),
           price,
           price_details: priceDetailsInput.value.trim(),
+          logo,
           images,
           is_public: publicInput.checked,
           detail_link_id: detailLinkId,
@@ -2631,6 +2667,12 @@
           el('div', { class: 'product-link-picker' }, [linkSelect, toggleNewLinkButton]),
           el('div', { class: 'field-hint' }, ['O visitante será direcionado para este link ao clicar em "Ver detalhes".']),
           newLinkPanel,
+        ]),
+        el('div', { class: 'field field-span-2 product-logo-editor' }, [
+          el('label', {}, ['Logo da solução']),
+          logoPreview,
+          logoInput,
+          el('div', { class: 'field-hint' }, ['Usado como capa do produto no catálogo. Se não houver logo, a primeira imagem será exibida.']),
         ]),
         el('div', { class: 'field field-span-2' }, [
           el('label', {}, ['Imagens da solução']),

@@ -27,6 +27,19 @@ function parseImages(input) {
   return { ok: true, images };
 }
 
+function parseLogo(input) {
+  if (input === undefined) return { ok: true, logo: undefined };
+  if (input === '' || input === null) return { ok: true, logo: '' };
+  if (typeof input !== 'string' || input.length > MAX_IMAGE_LENGTH || !isAllowedImageDataUrl(input)) {
+    return { ok: false, error: 'O logo deve ser PNG, JPG, WEBP ou GIF e ter no máximo cerca de 500 KB.' };
+  }
+  return { ok: true, logo: input };
+}
+
+function parseStoredLogo(value) {
+  return typeof value === 'string' && isAllowedImageDataUrl(value) ? value : '';
+}
+
 function parseStoredImages(value) {
   try {
     const parsed = JSON.parse(value || '[]');
@@ -46,6 +59,7 @@ function serializeProduct(row) {
     observations: row.observations || '',
     price: row.price === null || row.price === undefined ? null : Number(row.price),
     price_details: row.price_details || '',
+    logo: parseStoredLogo(row.logo),
     images: parseStoredImages(row.images),
     is_public: !!row.is_public,
     detail_link_id: row.detail_link_id || null,
@@ -86,6 +100,8 @@ async function validateFields(body, current = null, accountId) {
 
   const imageResult = parseImages(body.images);
   if (!imageResult.ok) return { error: imageResult.error };
+  const logoResult = parseLogo(body.logo);
+  if (!logoResult.ok) return { error: logoResult.error };
 
   let detailLinkId = body.detail_link_id === undefined ? current?.detail_link_id : body.detail_link_id;
   if (detailLinkId === null || detailLinkId === undefined || detailLinkId === '') {
@@ -110,6 +126,7 @@ async function validateFields(body, current = null, accountId) {
       observations: (typeof body.observations === 'string' ? body.observations : current?.observations || '').trim().slice(0, 4000),
       price,
       price_details: (typeof body.price_details === 'string' ? body.price_details : current?.price_details || '').trim().slice(0, 600),
+      logo: logoResult.logo === undefined ? parseStoredLogo(current?.logo) : logoResult.logo,
       images: imageResult.images === undefined ? parseStoredImages(current?.images) : imageResult.images,
       is_public: typeof body.is_public === 'boolean' ? (body.is_public ? 1 : 0) : (current?.is_public || 0),
       detail_link_id: detailLinkId,
@@ -178,8 +195,8 @@ router.post('/', ah(async (req, res) => {
   const value = validated.value;
   const inserted = await db.run(
     `INSERT INTO products
-      (user_id, name, category, summary, details, observations, price, price_details, images, is_public, detail_link_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      (user_id, name, category, summary, details, observations, price, price_details, logo, images, is_public, detail_link_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     req.user.account_id,
     value.name,
     value.category,
@@ -188,6 +205,7 @@ router.post('/', ah(async (req, res) => {
     value.observations,
     value.price,
     value.price_details,
+    value.logo,
     JSON.stringify(value.images),
     value.is_public,
     value.detail_link_id
@@ -203,7 +221,7 @@ router.put('/:id', ah(async (req, res) => {
   const value = validated.value;
   const updated = await db.run(
     `UPDATE products SET name=?, category=?, summary=?, details=?, observations=?, price=?,
-       price_details=?, images=?, is_public=?, detail_link_id=?, updated_at=NOW() WHERE id=? RETURNING id`,
+       price_details=?, logo=?, images=?, is_public=?, detail_link_id=?, updated_at=NOW() WHERE id=? RETURNING id`,
     value.name,
     value.category,
     value.summary,
@@ -211,6 +229,7 @@ router.put('/:id', ah(async (req, res) => {
     value.observations,
     value.price,
     value.price_details,
+    value.logo,
     JSON.stringify(value.images),
     value.is_public,
     value.detail_link_id,

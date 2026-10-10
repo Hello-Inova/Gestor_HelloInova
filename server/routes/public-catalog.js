@@ -27,7 +27,7 @@ router.get('/:slug', ah(async (req, res) => {
   if (!account) return res.status(404).json({ error: 'Catálogo não encontrado.' });
   const rows = await db.all(
     `SELECT p.id, p.name, p.category, p.summary, p.details, p.price, p.price_details,
-            p.images, p.updated_at, l.url AS detail_url
+            p.logo, p.images, p.updated_at, l.url AS detail_url
        FROM products p
        LEFT JOIN product_catalog_links l ON l.id = p.detail_link_id AND l.user_id = p.user_id
       WHERE p.user_id = ? AND p.is_public = 1 ORDER BY p.name ASC`,
@@ -43,6 +43,7 @@ router.get('/:slug', ah(async (req, res) => {
       details: row.details || '',
       price: row.price === null || row.price === undefined ? null : Number(row.price),
       price_details: row.price_details || '',
+      logo: typeof row.logo === 'string' && isAllowedImageDataUrl(row.logo) ? row.logo : '',
       images: parseImages(row.images),
       detail_url: normalizeCatalogDestinationUrl(row.detail_url) || '/captacao',
       updated_at: row.updated_at,
