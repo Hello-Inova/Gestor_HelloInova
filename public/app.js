@@ -2337,7 +2337,7 @@
   }
 
   function buildProductCatalogManager() {
-    const wrap = el('div', { class: 'canvas-scroll' });
+    const wrap = el('div', { class: 'canvas-scroll product-catalog-scroll' });
     const inner = el('div', { class: 'sysmgr' });
     const card = el('div', { class: 'sysmgr-card grow' });
     const products = state.products || [];
@@ -2399,7 +2399,7 @@
 
   function buildProductManagerCard(product) {
     const image = product.images && product.images[0]
-      ? el('img', { src: product.images[0], alt: '' })
+      ? el('img', { src: product.images[0], alt: product.name })
       : el('span', { class: 'product-manager-fallback', html: icon('image') });
     return el('article', { class: 'product-manager-card' }, [
       el('div', { class: 'product-manager-image' }, [
