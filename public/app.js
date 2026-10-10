@@ -2482,7 +2482,9 @@
     const detailsInput = el('textarea', { rows: '6', maxlength: '6000', placeholder: 'Descreva entregáveis, diferenciais e como a solução funciona' }, [product.details || '']);
     const observationsInput = el('textarea', { rows: '4', maxlength: '4000', placeholder: 'Anotações visíveis somente no Gestor' }, [product.observations || '']);
     const priceInput = el('input', { type: 'number', min: '0', max: '9999999999.99', step: '0.01', value: product.price === null || product.price === undefined ? '' : String(product.price), placeholder: '0,00' });
-    const priceDetailsInput = el('input', { type: 'text', maxlength: '300', value: product.price_details || '', placeholder: 'Ex.: a partir de, mensal ou pagamento único' });
+    const priceDetailsInput = el('textarea', {
+      rows: '3', maxlength: '600', placeholder: 'Ex.: A partir de R$ 1.500\nPagamento único\nInclui suporte por 30 dias',
+    }, [product.price_details || '']);
     const publicInput = el('input', { type: 'checkbox', checked: product.is_public ? true : null });
     const imageInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: true });
     const imageGrid = el('div', { class: 'product-image-editor-grid' });
@@ -2619,7 +2621,11 @@
         el('div', { class: 'field field-span-2' }, [el('label', {}, ['Resumo']), summaryInput]),
         el('div', { class: 'field field-span-2' }, [el('label', {}, ['Detalhes da solução']), detailsInput]),
         el('div', { class: 'field' }, [el('label', {}, ['Valor (R$)']), priceInput]),
-        el('div', { class: 'field' }, [el('label', {}, ['Complemento do valor']), priceDetailsInput]),
+        el('div', { class: 'field' }, [
+          el('label', {}, ['Complemento do valor']),
+          priceDetailsInput,
+          el('div', { class: 'field-hint' }, ['Use Enter para exibir cada informação em uma linha.']),
+        ]),
         el('div', { class: 'field field-span-2 product-link-field' }, [
           el('label', {}, ['Destino do botão "Ver detalhes"']),
           el('div', { class: 'product-link-picker' }, [linkSelect, toggleNewLinkButton]),

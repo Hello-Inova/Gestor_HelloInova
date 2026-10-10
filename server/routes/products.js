@@ -109,7 +109,7 @@ async function validateFields(body, current = null, accountId) {
       details: (typeof body.details === 'string' ? body.details : current?.details || '').trim().slice(0, 6000),
       observations: (typeof body.observations === 'string' ? body.observations : current?.observations || '').trim().slice(0, 4000),
       price,
-      price_details: (typeof body.price_details === 'string' ? body.price_details : current?.price_details || '').trim().slice(0, 300),
+      price_details: (typeof body.price_details === 'string' ? body.price_details : current?.price_details || '').trim().slice(0, 600),
       images: imageResult.images === undefined ? parseStoredImages(current?.images) : imageResult.images,
       is_public: typeof body.is_public === 'boolean' ? (body.is_public ? 1 : 0) : (current?.is_public || 0),
       detail_link_id: detailLinkId,
