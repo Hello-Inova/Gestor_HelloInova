@@ -76,11 +76,8 @@ body {
   background: rgba(40,116,255,.14);
   text-decoration: none;
   font-size: 13px;
-  font-weight: 700;
-  box-shadow: 0 12px 32px rgba(22,87,255,.18);
-  transition: transform .2s, box-shadow .2s;
+  font-weight: 600;
 }
-.public-nav-contact:hover { transform: translateY(-2px); box-shadow: 0 17px 38px rgba(22,87,255,.32); }
 .public-menu-toggle,
 .public-menu-overlay { display: none; }
 .public-hero-nav {
@@ -286,7 +283,7 @@ body {
   .public-hero { padding: 58px 0 30px; }
   .public-hero h1 { font-size: clamp(30px, 10vw, 42px); letter-spacing: -1px; }
   .public-hero p { font-size: 15px; }
-  .public-nav-contact { padding: 9px 12px; font-size: 12px; }
+  .public-nav-contact { padding: 9px 11px; font-size: 11px; }
   .public-main { width: 100%; padding: 28px 20px 54px; overflow: hidden; }
   .public-section-heading { margin-bottom: 28px; }
   .public-section-heading h2 { font-size: 28px; letter-spacing: -.8px; }

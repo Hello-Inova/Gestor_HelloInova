@@ -236,6 +236,7 @@ main, .catalog-footer { position: relative; z-index: 1; }
   .catalog-hero h1 { font-size: clamp(43px, 14vw, 66px); }
   .catalog-section { padding: 76px 18px 90px; }
   .catalog-grid.mobile-two-row-scroll { height: var(--mobile-scroll-height, auto); max-height: var(--mobile-scroll-height, none); overflow-x: hidden; overflow-y: scroll; overscroll-behavior: contain; padding-right: 5px; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: rgba(103,161,255,.72) rgba(255,255,255,.06); touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+  .catalog-grid.mobile-two-row-scroll .catalog-card { flex: 0 0 auto; }
   .catalog-grid.mobile-two-row-scroll::-webkit-scrollbar { width: 6px; }
   .catalog-grid.mobile-two-row-scroll::-webkit-scrollbar-track { border-radius: 999px; background: rgba(255,255,255,.04); }
   .catalog-grid.mobile-two-row-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(103,161,255,.55); }
