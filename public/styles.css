@@ -1234,6 +1234,20 @@ button { font-family: inherit; }
   .sysmgr-row-icon { width: 52px; height: 52px; border-radius: 12px; }
   .sysmgr-row-main-actions { grid-column: 1 / -1; }
   .sysmgr-row-main-actions .btn { width: 100%; }
+  .sysmgr-card.grow .leads-list {
+    flex: 0 0 auto;
+    max-height: 280px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 5px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(96, 140, 255, .52) rgba(255, 255, 255, .035);
+  }
+  .leads-list .sysmgr-row { height: 134px; }
+  .leads-list .sysmgr-row-main { height: 100%; }
+  .leads-list::-webkit-scrollbar { width: 7px; }
+  .leads-list::-webkit-scrollbar-track { background: rgba(255, 255, 255, .035); border-radius: 999px; }
+  .leads-list::-webkit-scrollbar-thumb { background: rgba(96, 140, 255, .52); border-radius: 999px; }
   .public-sites-grid { gap: 12px; }
   .public-site-card { grid-template-columns: 58px minmax(0, 1fr); min-height: 0; }
   .public-site-logo { width: 56px; height: 56px; min-height: 0; }

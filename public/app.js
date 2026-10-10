@@ -1775,7 +1775,7 @@
     }
     listCard.appendChild(filterBar);
 
-    const listBody = el('div', { class: 'sysmgr-list' }, [
+    const listBody = el('div', { class: 'sysmgr-list leads-list' }, [
       el('div', { class: 'dashboard-loading' }, ['Carregando leads…']),
     ]);
     listCard.appendChild(listBody);
