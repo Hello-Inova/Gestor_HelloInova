@@ -20,7 +20,7 @@ router.use((req, res, next) => {
 // requisição travar sem resposta.
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-const MAX_LOGO_LENGTH = 1_500_000; // ~1.1MB de imagem original (base64 infla ~33%)
+const MAX_LOGO_LENGTH = 700_000; // ~500KB de imagem original (base64 infla ~33%)
 const MAX_CONTRACT_LENGTH = 7_000_000; // ~5.2MB de arquivo original (base64 infla ~33%)
 const MAX_DOC_FILE_LENGTH = 7_000_000; // ~5.2MB por PDF (base64 infla ~33%)
 const MAX_DOC_FILES = 10; // limite de anexos na "Documentação Sistêmica"
@@ -380,7 +380,7 @@ router.post(
     const safeRepoUrl = normalizeHttpUrl(repo_url);
     if (!safeUrl) return res.status(400).json({ error: 'Informe um link de acesso HTTP ou HTTPS válido.' });
     if (repo_url && !safeRepoUrl) return res.status(400).json({ error: 'Informe um link de repositório válido.' });
-    if (!validLogo(logo)) return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
+    if (!validLogo(logo)) return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~500KB).' });
     if (!validContractFile(contract_file)) {
       return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });
     }
@@ -436,8 +436,8 @@ router.put(
         (login_password !== undefined && (typeof login_password !== 'string' || login_password.length > 500))) {
       return res.status(400).json({ error: 'Credenciais do sistema inválidas.' });
     }
-    if (logo !== undefined && !validLogo(logo)) {
-      return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~1MB).' });
+    if (logo !== undefined && logo !== row.logo && !validLogo(logo)) {
+      return res.status(400).json({ error: 'Logo inválida ou muito grande (máx. ~500KB).' });
     }
     if (contract_file !== undefined && !validContractFile(contract_file)) {
       return res.status(400).json({ error: 'Anexo de contrato inválido ou muito grande (máx. ~5MB, PDF ou imagem).' });

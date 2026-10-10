@@ -2454,21 +2454,85 @@
     render();
   }
 
-  function readProductImage(file) {
+  const IMAGE_UPLOAD_LIMIT_BYTES = 500 * 1024;
+  const IMAGE_SOURCE_LIMIT_BYTES = 25 * 1024 * 1024;
+  const SUPPORTED_IMAGE_TYPE = /^image\/(png|jpe?g|webp|gif)$/i;
+
+  function readFileAsDataUrl(file) {
     return new Promise((resolve, reject) => {
-      if (!file || !/^image\/(png|jpe?g|webp|gif)$/i.test(file.type)) {
-        reject(new Error('Use imagens PNG, JPG, WEBP ou GIF.'));
-        return;
-      }
-      if (file.size > 520000) {
-        reject(new Error('Cada imagem deve ter no máximo cerca de 500 KB.'));
-        return;
-      }
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
       reader.readAsDataURL(file);
     });
+  }
+
+  function loadImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(image);
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Não foi possível processar a imagem.'));
+      };
+      image.src = objectUrl;
+    });
+  }
+
+  function canvasToImageBlob(canvas, quality) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('Não foi possível compactar a imagem.'));
+      }, 'image/webp', quality);
+    });
+  }
+
+  async function prepareImageUpload(file) {
+    if (!file || !SUPPORTED_IMAGE_TYPE.test(file.type)) {
+      throw new Error('Use imagens PNG, JPG, WEBP ou GIF.');
+    }
+    if (file.size > IMAGE_SOURCE_LIMIT_BYTES) {
+      throw new Error('A imagem original deve ter no máximo 25 MB.');
+    }
+    if (file.size <= IMAGE_UPLOAD_LIMIT_BYTES) return readFileAsDataUrl(file);
+
+    const image = await loadImageFile(file);
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    if (!sourceWidth || !sourceHeight) throw new Error('A imagem possui dimensões inválidas.');
+
+    const initialScale = Math.min(1, 2400 / Math.max(sourceWidth, sourceHeight));
+    let width = Math.max(1, Math.round(sourceWidth * initialScale));
+    let height = Math.max(1, Math.round(sourceHeight * initialScale));
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { alpha: true });
+    if (!context) throw new Error('Seu navegador não oferece suporte à compactação de imagens.');
+
+    const qualities = [0.86, 0.76, 0.66, 0.56, 0.46, 0.36];
+    for (let resizeAttempt = 0; resizeAttempt < 9; resizeAttempt += 1) {
+      canvas.width = width;
+      canvas.height = height;
+      context.clearRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      let lastBlob = null;
+      for (const quality of qualities) {
+        lastBlob = await canvasToImageBlob(canvas, quality);
+        if (lastBlob.size <= IMAGE_UPLOAD_LIMIT_BYTES) return readFileAsDataUrl(lastBlob);
+      }
+      const reduction = Math.max(0.55, Math.min(0.86, Math.sqrt(IMAGE_UPLOAD_LIMIT_BYTES / lastBlob.size) * 0.92));
+      width = Math.max(1, Math.round(width * reduction));
+      height = Math.max(1, Math.round(height * reduction));
+    }
+    throw new Error('Não foi possível compactar a imagem para menos de 500 KB.');
+  }
+
+  function readProductImage(file) {
+    return prepareImageUpload(file);
   }
 
   function buildProductModal() {
@@ -2569,6 +2633,7 @@
       try {
         logo = await readProductImage(file);
         renderLogo();
+        if (file.size > IMAGE_UPLOAD_LIMIT_BYTES) toast('Logo compactado automaticamente para menos de 500 KB.');
       } catch (err) {
         logoInput.value = '';
         toast(err.message, true);
@@ -2601,6 +2666,8 @@
         const loaded = await Promise.all(files.map(readProductImage));
         images = images.concat(loaded);
         renderImages();
+        const compacted = files.filter((file) => file.size > IMAGE_UPLOAD_LIMIT_BYTES).length;
+        if (compacted) toast(compacted + (compacted === 1 ? ' imagem compactada automaticamente.' : ' imagens compactadas automaticamente.'));
       } catch (err) {
         toast(err.message, true);
       }
@@ -2672,13 +2739,13 @@
           el('label', {}, ['Logo da solução']),
           logoPreview,
           logoInput,
-          el('div', { class: 'field-hint' }, ['Usado como capa do produto no catálogo. Se não houver logo, a primeira imagem será exibida.']),
+          el('div', { class: 'field-hint' }, ['Usado como capa do produto no catálogo. Arquivos acima de 500 KB são compactados automaticamente.']),
         ]),
         el('div', { class: 'field field-span-2' }, [
           el('label', {}, ['Imagens da solução']),
           imageGrid,
           imageInput,
-          el('div', { class: 'field-hint' }, ['Até 5 imagens. PNG, JPG, WEBP ou GIF, com cerca de 500 KB cada.']),
+          el('div', { class: 'field-hint' }, ['Até 5 imagens. Arquivos acima de 500 KB são compactados automaticamente.']),
         ]),
         el('div', { class: 'field field-span-2' }, [
           el('label', {}, ['Observações internas']), observationsInput,
@@ -3653,22 +3720,19 @@
     const logoPreview = el('div', { class: 'logo-preview' }, [
       logoData ? el('img', { src: logoData, alt: 'logo' }) : el('span', { html: icon('image') }),
     ]);
-    const logoFileInput = el('input', { type: 'file', accept: 'image/*' });
-    logoFileInput.addEventListener('change', () => {
+    const logoFileInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif' });
+    logoFileInput.addEventListener('change', async () => {
       const file = logoFileInput.files && logoFileInput.files[0];
       if (!file) return;
-      if (file.size > 1_200_000) {
-        toast('Imagem muito grande. Escolha um arquivo de até ~1MB.', true);
-        logoFileInput.value = '';
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        logoData = String(reader.result);
+      try {
+        logoData = await prepareImageUpload(file);
         logoPreview.innerHTML = '';
         logoPreview.appendChild(el('img', { src: logoData, alt: 'logo' }));
-      };
-      reader.readAsDataURL(file);
+        if (file.size > IMAGE_UPLOAD_LIMIT_BYTES) toast('Logo compactado automaticamente para menos de 500 KB.');
+      } catch (err) {
+        logoFileInput.value = '';
+        toast(err.message, true);
+      }
     });
     const logoPickBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => logoFileInput.click() }, [
       el('span', { html: icon('upload') }), ' Anexar logo',
@@ -3837,22 +3901,19 @@
 
     let logoData = '';
     const logoPreview = el('div', { class: 'logo-preview' }, [el('span', { html: icon('image') })]);
-    const logoFileInput = el('input', { type: 'file', accept: 'image/*' });
-    logoFileInput.addEventListener('change', () => {
+    const logoFileInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif' });
+    logoFileInput.addEventListener('change', async () => {
       const file = logoFileInput.files && logoFileInput.files[0];
       if (!file) return;
-      if (file.size > 1_200_000) {
-        toast('Imagem muito grande. Escolha um arquivo de até ~1MB.', true);
-        logoFileInput.value = '';
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        logoData = String(reader.result);
+      try {
+        logoData = await prepareImageUpload(file);
         logoPreview.innerHTML = '';
         logoPreview.appendChild(el('img', { src: logoData, alt: 'logo' }));
-      };
-      reader.readAsDataURL(file);
+        if (file.size > IMAGE_UPLOAD_LIMIT_BYTES) toast('Logo compactado automaticamente para menos de 500 KB.');
+      } catch (err) {
+        logoFileInput.value = '';
+        toast(err.message, true);
+      }
     });
     const logoPickBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => logoFileInput.click() }, [
       el('span', { html: icon('upload') }), ' Anexar logo',
