@@ -15,6 +15,16 @@
 html { scroll-behavior: smooth; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--body); }
 a { color: inherit; }
+.premium-scene {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: .9;
+}
+main, .catalog-footer { position: relative; z-index: 1; }
 .catalog-nav {
   position: fixed;
   z-index: 30;
@@ -220,7 +230,7 @@ a { color: inherit; }
 .image-lightbox-toolbar .image-lightbox-zoom-label { width: 58px; font-size: 10px; }
 .image-lightbox-counter { min-width: 45px; padding: 0 5px; color: var(--muted); font-size: 11px; text-align: center; }
 @media (max-width: 980px) { .catalog-hero { grid-template-columns: 1fr; } .catalog-hero-panel { display: none; } .catalog-footer { flex-direction: column; } }
-@media (max-width: 680px) {
+@media (max-width: 768px) {
   .catalog-nav { height: 66px; padding: 0 18px; }
   .catalog-brand img { width: 34px; height: 34px; }
   .catalog-brand span { font-size: 16px; }
@@ -229,6 +239,10 @@ a { color: inherit; }
   .catalog-hero { min-height: 650px; padding: 110px 20px 70px; }
   .catalog-hero h1 { font-size: clamp(43px, 14vw, 66px); }
   .catalog-section { padding: 76px 18px 90px; }
+  .catalog-grid.mobile-two-row-scroll { overflow-y: auto; overscroll-behavior: contain; padding-right: 5px; scrollbar-width: thin; scrollbar-color: rgba(103,161,255,.55) rgba(255,255,255,.04); }
+  .catalog-grid.mobile-two-row-scroll::-webkit-scrollbar { width: 6px; }
+  .catalog-grid.mobile-two-row-scroll::-webkit-scrollbar-track { border-radius: 999px; background: rgba(255,255,255,.04); }
+  .catalog-grid.mobile-two-row-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(103,161,255,.55); }
   .catalog-card { grid-template-columns: 82px minmax(0, 1fr); align-items: start; border-radius: 14px; }
   .catalog-card-image { width: 66px; height: 66px; margin: 12px 4px 12px 12px; border-radius: 11px; }
   .catalog-card-image.has-logo img { padding: 6px; }
@@ -253,4 +267,7 @@ a { color: inherit; }
   .image-lightbox-nav.next { right: 12px; }
   .image-lightbox-toolbar { bottom: 17px; }
 }
-@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+  .premium-scene { display: none; }
+}

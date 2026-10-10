@@ -100,6 +100,7 @@
     count.textContent = visible.length + (visible.length === 1 ? ' projeto encontrado' : ' projetos encontrados');
     if (!visible.length) {
       grid.appendChild(node('div', 'public-state', systems.length ? 'Nenhum projeto corresponde à pesquisa.' : 'Novos projetos serão publicados aqui em breve.'));
+      updateMobileScrollWindow();
       return;
     }
     visible.forEach((system) => {
@@ -107,6 +108,25 @@
       grid.appendChild(item);
       if (cardObserver) cardObserver.observe(item);
       else item.classList.add('is-visible');
+    });
+    updateMobileScrollWindow();
+  }
+
+  function updateMobileScrollWindow() {
+    const cards = [...grid.querySelectorAll('.site-card')];
+    const mobile = window.matchMedia('(max-width: 768px)').matches;
+    grid.classList.remove('mobile-two-row-scroll');
+    grid.style.removeProperty('max-height');
+    grid.removeAttribute('tabindex');
+    grid.removeAttribute('aria-label');
+    if (!mobile || cards.length <= 2) return;
+    requestAnimationFrame(() => {
+      const rowGap = parseFloat(getComputedStyle(grid).rowGap) || 12;
+      const height = cards[0].offsetHeight + cards[1].offsetHeight + rowGap;
+      grid.style.maxHeight = Math.ceil(height) + 'px';
+      grid.classList.add('mobile-two-row-scroll');
+      grid.tabIndex = 0;
+      grid.setAttribute('aria-label', 'Lista de projetos com rolagem');
     });
   }
 
@@ -132,6 +152,7 @@
   }
 
   search.addEventListener('input', render);
+  window.addEventListener('resize', updateMobileScrollWindow, { passive: true });
   fetch('/api/public-sites/' + encodeURIComponent(slug))
     .then(async (response) => {
       const data = await response.json();

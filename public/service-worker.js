@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hello-inova-shell-v16';
+const CACHE_NAME = 'hello-inova-shell-v18';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -6,6 +6,9 @@ const APP_SHELL = [
   '/app.js',
   '/catalog.css',
   '/catalog.js',
+  '/public-sites.css',
+  '/public-sites.js',
+  '/public-sites-3d.js',
   '/manifest.webmanifest',
   '/assets/logo-mark.png',
   '/assets/pwa-icon-192.png',

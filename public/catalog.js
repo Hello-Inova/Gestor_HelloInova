@@ -103,9 +103,29 @@
     count.textContent = visible.length + (visible.length === 1 ? ' solução encontrada' : ' soluções encontradas');
     if (!visible.length) {
       grid.appendChild(node('div', 'catalog-state', products.length ? 'Nenhuma solução corresponde à pesquisa.' : 'Nenhuma solução foi publicada ainda.'));
+      updateMobileScrollWindow();
       return;
     }
     visible.forEach((product) => grid.appendChild(buildCard(product)));
+    updateMobileScrollWindow();
+  }
+
+  function updateMobileScrollWindow() {
+    const cards = [...grid.querySelectorAll('.catalog-card')];
+    const mobile = window.matchMedia('(max-width: 768px)').matches;
+    grid.classList.remove('mobile-two-row-scroll');
+    grid.style.removeProperty('max-height');
+    grid.removeAttribute('tabindex');
+    grid.removeAttribute('aria-label');
+    if (!mobile || cards.length <= 2) return;
+    requestAnimationFrame(() => {
+      const rowGap = parseFloat(getComputedStyle(grid).rowGap) || 12;
+      const height = cards[0].offsetHeight + cards[1].offsetHeight + rowGap;
+      grid.style.maxHeight = Math.ceil(height) + 'px';
+      grid.classList.add('mobile-two-row-scroll');
+      grid.tabIndex = 0;
+      grid.setAttribute('aria-label', 'Lista de soluções com rolagem');
+    });
   }
 
   function openProduct(product) {
@@ -289,6 +309,7 @@
     if (event.key === 'Escape' && !dialog.hidden) closeProduct();
   });
   search.addEventListener('input', renderProducts);
+  window.addEventListener('resize', updateMobileScrollWindow, { passive: true });
 
   fetch('/api/public-catalog/' + encodeURIComponent(slug), { credentials: 'omit' })
     .then((response) => response.ok ? response.json() : Promise.reject(new Error('Catálogo não encontrado.')))
