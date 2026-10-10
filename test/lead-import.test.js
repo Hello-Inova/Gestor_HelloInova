@@ -4,6 +4,7 @@ const XLSX = require('xlsx');
 
 const {
   LeadImportError,
+  createLeadImportTemplateBuffer,
   duplicateKey,
   parseLeadWorkbook,
 } = require('../server/lead-import');
@@ -16,8 +17,8 @@ function workbookBuffer(rows, bookType = 'xlsx') {
 
 test('importa XLSX com cabeçalhos em português e campos opcionais', () => {
   const buffer = workbookBuffer([
-    ['Nome', 'WhatsApp', 'E-mail', 'Serviços', 'Segmento', 'Descrição', 'Status'],
-    ['Maria Silva', '(11) 99999-0000', 'MARIA@EXEMPLO.COM', 'Website; Landing Page', 'Varejo', 'Novo site', 'Em contato'],
+    ['Nome completo', 'WhatsApp', 'E-mail', 'Serviço desejado', 'Ramo de negócio', 'Descrição da necessidade', 'Link do Instagram', 'Nome do responsável pelo negócio', 'Contato do responsável', 'Status'],
+    ['Maria Silva', '(11) 99999-0000', 'MARIA@EXEMPLO.COM', 'Website; Automação comercial', 'Varejo', 'Novo site', 'https://instagram.com/empresa', 'Carlos Silva', '(11) 98888-7777', 'Em contato'],
   ]);
   const parsed = parseLeadWorkbook(buffer, 'leads.xlsx');
   assert.equal(parsed.totalRows, 1);
@@ -26,15 +27,28 @@ test('importa XLSX com cabeçalhos em português e campos opcionais', () => {
     name: 'Maria Silva',
     whatsapp: '(11) 99999-0000',
     email: 'maria@exemplo.com',
-    services: ['Website', 'Landing Page'],
+    services: ['Website', 'Automação comercial'],
     business_segment: 'Varejo',
     business_segment_other: '',
     description: 'Novo site',
+    instagram_url: 'https://instagram.com/empresa',
+    responsible_name: 'Carlos Silva',
+    responsible_contact: '(11) 98888-7777',
     source: 'Importação Excel',
     step_completed: 2,
     status: 'em_contato',
     source_row: 2,
   });
+});
+
+test('gera modelo XLSX com todos os campos aceitos pelo importador', () => {
+  const workbook = XLSX.read(createLeadImportTemplateBuffer(), { type: 'buffer' });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets.Leads, { header: 1 });
+  assert.deepEqual(rows[0], [
+    'Nome completo', 'WhatsApp', 'E-mail', 'Serviço desejado', 'Ramo de negócio',
+    'Descrição da necessidade', 'Link do Instagram', 'Nome do responsável pelo negócio',
+    'Contato do responsável',
+  ]);
 });
 
 test('aceita arquivo XLS legado', () => {

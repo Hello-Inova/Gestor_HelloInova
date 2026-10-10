@@ -14,6 +14,7 @@ const { requireAnyModule } = require('../permissions');
 const {
   MAX_FILE_BYTES,
   LeadImportError,
+  createLeadImportTemplateBuffer,
   duplicateKey,
   parseLeadWorkbook,
 } = require('../lead-import');
@@ -169,6 +170,22 @@ router.get(
   })
 );
 
+router.get(
+  '/import-template',
+  requireAuth,
+  requireAnyModule('leads'),
+  (req, res) => {
+    const template = createLeadImportTemplateBuffer();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="modelo-importacao-leads.xlsx"',
+      'Content-Length': String(template.length),
+      'Cache-Control': 'private, no-store',
+    });
+    res.send(template);
+  }
+);
+
 router.post(
   '/import',
   requireAuth,
@@ -223,7 +240,7 @@ router.post(
       if (uniqueLeads.length) {
         const params = [];
         const valueGroups = uniqueLeads.map((lead, rowIndex) => {
-          const offset = rowIndex * 10;
+          const offset = rowIndex * 13;
           params.push(
             lead.name,
             lead.whatsapp,
@@ -232,16 +249,20 @@ router.post(
             lead.business_segment,
             lead.business_segment_other,
             lead.description,
+            lead.instagram_url,
+            lead.responsible_name,
+            lead.responsible_contact,
             lead.source,
             lead.step_completed,
             lead.status
           );
-          return `(${Array.from({ length: 10 }, (_, index) => `$${offset + index + 1}`).join(', ')})`;
+          return `(${Array.from({ length: 13 }, (_, index) => `$${offset + index + 1}`).join(', ')})`;
         });
         const inserted = await client.query(
           `INSERT INTO leads
              (name, whatsapp, email, services, business_segment, business_segment_other,
-              description, source, step_completed, status)
+              description, instagram_url, responsible_name, responsible_contact,
+              source, step_completed, status)
            VALUES ${valueGroups.join(', ')}
            RETURNING *`,
           params

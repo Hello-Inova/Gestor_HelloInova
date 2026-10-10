@@ -200,6 +200,9 @@ const SCHEMA_SQL = `
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
   ALTER TABLE leads ADD COLUMN IF NOT EXISTS public_token_hash TEXT;
+  ALTER TABLE leads ADD COLUMN IF NOT EXISTS instagram_url TEXT DEFAULT '';
+  ALTER TABLE leads ADD COLUMN IF NOT EXISTS responsible_name TEXT DEFAULT '';
+  ALTER TABLE leads ADD COLUMN IF NOT EXISTS responsible_contact TEXT DEFAULT '';
   CREATE INDEX IF NOT EXISTS leads_public_token_hash_idx ON leads(public_token_hash);
 
   CREATE TABLE IF NOT EXISTS products (

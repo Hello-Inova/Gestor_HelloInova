@@ -1696,8 +1696,13 @@
           el('span', { html: icon('info') }),
           el('div', {}, [
             el('strong', {}, ['Como preparar a planilha']),
-            el('p', {}, ['Use a primeira aba e uma linha de cabeçalho. As colunas obrigatórias são Nome, WhatsApp e E-mail.']),
-            el('p', {}, ['Opcionais: Serviços, Segmento, Descrição e Status. Separe vários serviços por vírgula ou ponto e vírgula.']),
+            el('p', {}, ['Use a primeira aba e uma linha de cabeçalho. Nome completo, WhatsApp e E-mail são obrigatórios.']),
+            el('p', {}, ['Também são aceitos: Serviço desejado, Ramo de negócio, Descrição da necessidade, Link do Instagram, Nome do responsável pelo negócio e Contato do responsável.']),
+            el('a', {
+              class: 'btn btn-ghost btn-sm',
+              href: '/api/leads/import-template',
+              download: 'modelo-importacao-leads.xlsx',
+            }, [el('span', { html: icon('download') }), ' Baixar modelo XLSX']),
           ]),
         ]),
         el('label', { class: 'lead-import-picker' }, [
@@ -1781,7 +1786,9 @@
       const statuses = state.leadsFilterStatus;
       return all.filter((lead) => {
         if (term) {
-          const hay = [lead.name, lead.whatsapp, lead.email].filter(Boolean).join(' ').toLowerCase();
+          const hay = [lead.name, lead.whatsapp, lead.email, lead.business_segment,
+            lead.instagram_url, lead.responsible_name, lead.responsible_contact]
+            .filter(Boolean).join(' ').toLowerCase();
           if (!hay.includes(term)) return false;
         }
         if (statuses.length && !statuses.includes(lead.status)) return false;
@@ -1897,6 +1904,9 @@
       viewField('Ramo de negócio', lead.business_segment === 'Outros' && lead.business_segment_other
         ? lead.business_segment_other
         : (lead.business_segment || '—')),
+      viewField('Instagram', lead.instagram_url || '—'),
+      viewField('Responsável pelo negócio', lead.responsible_name || '—'),
+      viewFieldWhatsApp('Contato do responsável', lead.responsible_contact || '—'),
       viewField('Etapa preenchida', lead.step_completed >= 2 ? 'Etapa 1 e 2' : 'Apenas etapa 1'),
       viewField('Recebido em', formatDateBR(lead.created_at)),
     ]);

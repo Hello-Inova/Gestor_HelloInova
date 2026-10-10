@@ -11,9 +11,22 @@ const HEADER_ALIASES = {
   name: ['nome', 'nome completo', 'name'],
   whatsapp: ['whatsapp', 'whats app', 'telefone', 'celular', 'phone'],
   email: ['email', 'e mail'],
-  services: ['servicos', 'servico', 'services', 'servicos desejados'],
+  services: ['servicos', 'servico', 'services', 'servicos desejados', 'servico desejado'],
   business_segment: ['segmento', 'ramo', 'ramo de negocio', 'nicho', 'business segment'],
-  description: ['descricao', 'necessidade', 'observacoes', 'observacao', 'description'],
+  description: ['descricao', 'necessidade', 'descricao da necessidade', 'observacoes', 'observacao', 'description'],
+  instagram_url: ['instagram', 'link instagram', 'link do instagram', 'instagram url', 'url instagram'],
+  responsible_name: [
+    'responsavel',
+    'nome do responsavel',
+    'nome do responsavel pelo negocio',
+    'responsavel pelo negocio',
+  ],
+  responsible_contact: [
+    'contato do responsavel',
+    'contato responsavel',
+    'telefone do responsavel',
+    'whatsapp do responsavel',
+  ],
   status: ['status', 'situacao'],
 };
 
@@ -75,11 +88,11 @@ function normalizeStatus(value) {
 function normalizeServices(value) {
   const wanted = cleanText(value, 1000)
     .split(/[,;|\n]+/)
-    .map((item) => comparableText(item))
+    .map((item) => cleanText(item, 120))
     .filter(Boolean);
   const allowed = new Map(VALID_SERVICES.map((service) => [comparableText(service), service]));
-  const normalized = wanted.map((item) => allowed.get(item) || 'Outro');
-  return [...new Set(normalized)];
+  const normalized = wanted.map((item) => allowed.get(comparableText(item)) || item);
+  return [...new Map(normalized.map((item) => [comparableText(item), item])).values()].slice(0, 20);
 }
 
 function buildHeaderMap(headerRow) {
@@ -123,6 +136,9 @@ function normalizeLeadRow(row, headerMap, sheetRowNumber) {
   const email = cleanText(get('email'), 320).toLowerCase();
   const businessSegment = cleanText(get('business_segment'), 200);
   const description = cleanText(get('description'), 5000);
+  const instagramUrl = cleanText(get('instagram_url'), 2000);
+  const responsibleName = cleanText(get('responsible_name'), 200);
+  const responsibleContact = cleanText(get('responsible_contact'), 200);
   const status = normalizeStatus(get('status'));
   const services = normalizeServices(get('services'));
   const errors = [];
@@ -143,12 +159,38 @@ function normalizeLeadRow(row, headerMap, sheetRowNumber) {
       business_segment: businessSegment,
       business_segment_other: '',
       description,
+      instagram_url: instagramUrl,
+      responsible_name: responsibleName,
+      responsible_contact: responsibleContact,
       source: 'Importação Excel',
-      step_completed: services.length || businessSegment || description ? 2 : 1,
+      step_completed: services.length || businessSegment || description || instagramUrl || responsibleName || responsibleContact ? 2 : 1,
       status,
       source_row: sheetRowNumber,
     },
   };
+}
+
+function createLeadImportTemplateBuffer() {
+  const headers = [[
+    'Nome completo',
+    'WhatsApp',
+    'E-mail',
+    'Serviço desejado',
+    'Ramo de negócio',
+    'Descrição da necessidade',
+    'Link do Instagram',
+    'Nome do responsável pelo negócio',
+    'Contato do responsável',
+  ]];
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet(headers);
+  worksheet['!cols'] = [
+    { wch: 28 }, { wch: 20 }, { wch: 32 }, { wch: 28 }, { wch: 26 },
+    { wch: 45 }, { wch: 38 }, { wch: 38 }, { wch: 28 },
+  ];
+  worksheet['!autofilter'] = { ref: 'A1:I1' };
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 }
 
 function parseLeadWorkbook(buffer, fileName) {
@@ -208,6 +250,7 @@ module.exports = {
   MAX_FILE_BYTES,
   MAX_IMPORT_ROWS,
   LeadImportError,
+  createLeadImportTemplateBuffer,
   duplicateKey,
   normalizeLeadRow,
   parseLeadWorkbook,
