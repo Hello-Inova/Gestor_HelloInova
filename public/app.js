@@ -34,6 +34,7 @@
     leads: null, // lista de leads captados (módulo "Leads")
     leadsSearch: '',
     leadsFilterStatus: [],
+    leadsBusinessSegment: '',
     leadModal: null, // lead sendo visualizado no pop-up de detalhes
     leadImportModal: null, // arquivo/resultado da importação em massa
     candidates: null, // candidaturas recebidas pelo formulário público de SDR
@@ -1339,7 +1340,7 @@
       ]),
     ]));
 
-    const listBody = el('div', { class: 'sysmgr-list' }, [
+    const listBody = el('div', { class: 'sysmgr-list users-list' }, [
       el('div', { class: 'dashboard-loading' }, ['Carregando usuários…']),
     ]);
     listCard.appendChild(listBody);
@@ -1490,7 +1491,7 @@
       el('div', { class: 'field' }, [el('label', {}, ['Módulos permitidos']), accessFields.permissionsBox, accessFields.hint]),
     ]);
 
-    const card = el('div', { class: 'modal-card' }, [
+    const card = el('div', { class: 'modal-card user-modal-card' }, [
       el('div', { class: 'modal-header' }, [
         el('h3', {}, ['Novo usuário']),
         el('button', { class: 'btn btn-ghost btn-icon', onclick: closeUserModal, html: icon('close') }),
@@ -1529,7 +1530,7 @@
       }
     });
 
-    const card = el('div', { class: 'modal-card' }, [
+    const card = el('div', { class: 'modal-card user-modal-card' }, [
       el('div', { class: 'modal-header' }, [
         el('h3', {}, ['Acesso de ' + user.name]),
         el('button', { class: 'btn btn-ghost btn-icon', onclick: closeUserModal, html: icon('close') }),
@@ -1750,9 +1751,19 @@
       state.leadsSearch = searchInput.value;
       refreshList();
     });
-    listCard.appendChild(el('div', { class: 'sysmgr-search' }, [
-      el('span', { class: 'search-icon', html: icon('search') }),
-      searchInput,
+    const segmentSelect = el('select', { class: 'leads-segment-filter', 'aria-label': 'Filtrar por ramo de negócio' }, [
+      el('option', { value: '' }, ['Todos os ramos de negócio']),
+    ]);
+    segmentSelect.addEventListener('change', () => {
+      state.leadsBusinessSegment = segmentSelect.value;
+      refreshList();
+    });
+    listCard.appendChild(el('div', { class: 'leads-search-row' }, [
+      el('div', { class: 'sysmgr-search' }, [
+        el('span', { class: 'search-icon', html: icon('search') }),
+        searchInput,
+      ]),
+      segmentSelect,
     ]));
 
     // ---- Filtros por status ----
@@ -1792,6 +1803,10 @@
           if (!hay.includes(term)) return false;
         }
         if (statuses.length && !statuses.includes(lead.status)) return false;
+        const segment = lead.business_segment === 'Outros' && lead.business_segment_other
+          ? lead.business_segment_other
+          : lead.business_segment;
+        if (state.leadsBusinessSegment && segment !== state.leadsBusinessSegment) return false;
         return true;
       });
     }
@@ -1814,6 +1829,21 @@
     api('/leads')
       .then(({ leads }) => {
         state.leads = leads;
+        const segments = [...new Set(leads.map((lead) => (
+          lead.business_segment === 'Outros' && lead.business_segment_other
+            ? lead.business_segment_other
+            : lead.business_segment
+        )).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        segmentSelect.innerHTML = '';
+        segmentSelect.appendChild(el('option', { value: '' }, ['Todos os ramos de negócio']));
+        segments.forEach((segment) => segmentSelect.appendChild(el('option', {
+          value: segment,
+          selected: state.leadsBusinessSegment === segment ? true : null,
+        }, [segment])));
+        if (state.leadsBusinessSegment && !segments.includes(state.leadsBusinessSegment)) {
+          state.leadsBusinessSegment = '';
+          segmentSelect.value = '';
+        }
         refreshList();
       })
       .catch((err) => {
@@ -1854,7 +1884,7 @@
   }
 
   function openLeadModal(lead) {
-    state.leadModal = { lead };
+    state.leadModal = { lead, mode: 'view' };
     render();
   }
   function closeLeadModal() {
@@ -1888,6 +1918,7 @@
 
   function buildLeadModal() {
     const lead = state.leadModal.lead;
+    if (state.leadModal.mode === 'edit') return buildLeadEditModal(lead);
     const services = Array.isArray(lead.services) ? lead.services : [];
 
     const statusSelect = el('select', {}, LEAD_STATUS_ORDER.map((st) =>
@@ -1927,6 +1958,10 @@
       el('div', { class: 'modal-header' }, [
         el('h3', {}, ['Lead: ' + lead.name]),
         el('div', { class: 'modal-header-actions' }, [
+          el('button', {
+            class: 'btn btn-ghost btn-icon', title: 'Editar lead',
+            onclick: () => { state.leadModal.mode = 'edit'; render(); }, html: icon('edit'),
+          }),
           el('button', { class: 'btn btn-danger btn-icon', title: 'Excluir lead', onclick: () => deleteLead(lead), html: icon('trash') }),
           el('button', { class: 'btn btn-ghost btn-icon', onclick: closeLeadModal, html: icon('close') }),
         ]),
@@ -1937,6 +1972,93 @@
     return el('div', {
       class: 'modal-overlay',
       onclick: (ev) => { if (ev.target === ev.currentTarget) closeLeadModal(); },
+    }, [card]);
+  }
+
+  function buildLeadEditModal(lead) {
+    const servicesInput = el('input', {
+      type: 'text', maxlength: '1000', value: (lead.services || []).join(', '),
+      placeholder: 'Ex.: Website, Landing Page',
+    });
+    const fields = {
+      name: el('input', { type: 'text', maxlength: '200', value: lead.name || '' }),
+      whatsapp: el('input', { type: 'text', maxlength: '40', value: lead.whatsapp || '' }),
+      email: el('input', { type: 'email', maxlength: '320', value: lead.email || '' }),
+      businessSegment: el('input', { type: 'text', maxlength: '200', value: lead.business_segment || '' }),
+      description: el('textarea', { rows: '5', maxlength: '5000' }, [lead.description || '']),
+      instagramUrl: el('input', { type: 'text', maxlength: '2000', value: lead.instagram_url || '' }),
+      responsibleName: el('input', { type: 'text', maxlength: '200', value: lead.responsible_name || '' }),
+      responsibleContact: el('input', { type: 'text', maxlength: '200', value: lead.responsible_contact || '' }),
+      status: el('select', {}, LEAD_STATUS_ORDER.map((status) => el('option', {
+        value: status, selected: status === lead.status ? true : null,
+      }, [LEAD_STATUS_LABELS[status]]))),
+    };
+    const saveButton = el('button', { class: 'btn btn-primary', type: 'button' }, ['Salvar alterações']);
+    saveButton.addEventListener('click', async () => {
+      const name = fields.name.value.trim();
+      const whatsapp = fields.whatsapp.value.trim();
+      const email = fields.email.value.trim();
+      if (!name || !whatsapp || !email) {
+        toast('Preencha nome, WhatsApp e e-mail.', true);
+        return;
+      }
+      saveButton.disabled = true;
+      try {
+        const { lead: updated } = await api('/leads/' + lead.id, {
+          method: 'PUT',
+          body: {
+            name,
+            whatsapp,
+            email,
+            services: servicesInput.value.split(/[,;|\n]+/).map((item) => item.trim()).filter(Boolean),
+            business_segment: fields.businessSegment.value.trim(),
+            description: fields.description.value.trim(),
+            instagram_url: fields.instagramUrl.value.trim(),
+            responsible_name: fields.responsibleName.value.trim(),
+            responsible_contact: fields.responsibleContact.value.trim(),
+            status: fields.status.value,
+          },
+        });
+        state.leads = (state.leads || []).map((item) => item.id === updated.id ? updated : item);
+        state.leadModal = { lead: updated, mode: 'view' };
+        render();
+        toast('Lead atualizado.');
+      } catch (err) {
+        saveButton.disabled = false;
+        toast(err.message, true);
+      }
+    });
+
+    const card = el('div', { class: 'modal-card view-modal-card lead-edit-modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Editar lead: ' + lead.name]),
+        el('button', { class: 'btn btn-ghost btn-icon', onclick: closeLeadModal, html: icon('close') }),
+      ]),
+      el('div', { class: 'modal-body candidate-edit-body' }, [
+        el('div', { class: 'candidate-edit-grid' }, [
+          el('div', { class: 'field' }, [el('label', {}, ['Nome completo']), fields.name]),
+          el('div', { class: 'field' }, [el('label', {}, ['WhatsApp']), fields.whatsapp]),
+          el('div', { class: 'field' }, [el('label', {}, ['E-mail']), fields.email]),
+          el('div', { class: 'field' }, [el('label', {}, ['Ramo de negócio']), fields.businessSegment]),
+          el('div', { class: 'field field-span-2' }, [el('label', {}, ['Serviços desejados']), servicesInput]),
+          el('div', { class: 'field' }, [el('label', {}, ['Link do Instagram']), fields.instagramUrl]),
+          el('div', { class: 'field' }, [el('label', {}, ['Status']), fields.status]),
+          el('div', { class: 'field' }, [el('label', {}, ['Responsável pelo negócio']), fields.responsibleName]),
+          el('div', { class: 'field' }, [el('label', {}, ['Contato do responsável']), fields.responsibleContact]),
+          el('div', { class: 'field field-span-2' }, [el('label', {}, ['Descrição da necessidade']), fields.description]),
+        ]),
+      ]),
+      el('div', { class: 'modal-footer' }, [
+        el('button', {
+          class: 'btn btn-ghost', type: 'button',
+          onclick: () => { state.leadModal.mode = 'view'; render(); },
+        }, ['Cancelar']),
+        saveButton,
+      ]),
+    ]);
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (event) => { if (event.target === event.currentTarget) closeLeadModal(); },
     }, [card]);
   }
 
@@ -2021,7 +2143,7 @@
       ]),
       gridBody,
     ]);
-    card.appendChild(el('div', { class: 'candidate-grid-scroll' }, [grid]));
+    card.appendChild(el('div', { class: 'candidate-grid-scroll candidate-single-scroll' }, [grid]));
 
     function applyFilters() {
       const term = (state.candidatesSearch || '').trim().toLowerCase();
@@ -2382,7 +2504,7 @@
     }, ['Limpar filtro']));
     if (categories.length) card.appendChild(categoryBar);
 
-    const grid = el('div', { class: 'product-manager-grid' });
+    const grid = el('div', { class: 'product-manager-grid product-single-scroll' });
     const refresh = () => {
       state.productSearch = search.value;
       const term = state.productSearch.trim().toLowerCase();
@@ -2415,9 +2537,6 @@
     return el('article', { class: 'product-manager-card' }, [
       el('div', { class: 'product-manager-image' + (product.logo ? ' has-logo' : '') }, [
         image,
-        product.images && product.images.length > 1
-          ? el('span', { class: 'product-image-count' }, [String(product.images.length) + ' imagens'])
-          : null,
       ]),
       el('div', { class: 'product-manager-content' }, [
         el('div', { class: 'product-manager-meta' }, [
@@ -2836,7 +2955,7 @@
     }, ['+ Novo nicho']));
     card.appendChild(nicheBar);
 
-    const grid = el('div', { class: 'public-sites-grid' });
+    const grid = el('div', { class: 'public-sites-grid public-sites-mobile-scroll' });
     const refresh = () => {
       state.publicSitesSearch = search.value;
       const term = state.publicSitesSearch.trim().toLowerCase();
@@ -2939,7 +3058,7 @@
     }
     listCard.appendChild(filterBar);
 
-    const listBody = el('div', { class: 'sysmgr-list' });
+    const listBody = el('div', { class: 'sysmgr-list systems-list' });
     listCard.appendChild(listBody);
 
     function applyFilters() {

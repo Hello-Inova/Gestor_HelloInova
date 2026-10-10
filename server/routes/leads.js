@@ -17,6 +17,7 @@ const {
   createLeadImportTemplateBuffer,
   duplicateKey,
   parseLeadWorkbook,
+  whatsappDigits,
 } = require('../lead-import');
 
 const router = express.Router();
@@ -297,13 +298,56 @@ router.put(
     const lead = await db.get('SELECT * FROM leads WHERE id = ?', req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead não encontrado.' });
 
-    const { status } = req.body || {};
-    if (!status || !VALID_STATUSES.includes(status)) {
+    const body = req.body || {};
+    const current = serializeLead(lead);
+    const status = body.status === undefined ? current.status : body.status;
+    if (!VALID_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'Status inválido.' });
     }
 
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : current.name;
+    const whatsapp = typeof body.whatsapp === 'string' ? body.whatsapp.trim().slice(0, 40) : current.whatsapp;
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase().slice(0, 320) : current.email;
+    if (!name) return res.status(400).json({ error: 'Informe o nome completo.' });
+    if (!whatsapp || whatsappDigits(whatsapp).length < 8) {
+      return res.status(400).json({ error: 'WhatsApp inválido.' });
+    }
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+
+    const services = Array.isArray(body.services)
+      ? [...new Set(body.services.map((service) => String(service).trim().slice(0, 120)).filter(Boolean))].slice(0, 20)
+      : current.services;
+    const businessSegment = typeof body.business_segment === 'string'
+      ? body.business_segment.trim().slice(0, 200)
+      : current.business_segment;
+    const description = typeof body.description === 'string'
+      ? body.description.trim().slice(0, 5000)
+      : current.description;
+    const instagramUrl = typeof body.instagram_url === 'string'
+      ? body.instagram_url.trim().slice(0, 2000)
+      : current.instagram_url;
+    const responsibleName = typeof body.responsible_name === 'string'
+      ? body.responsible_name.trim().slice(0, 200)
+      : current.responsible_name;
+    const responsibleContact = typeof body.responsible_contact === 'string'
+      ? body.responsible_contact.trim().slice(0, 200)
+      : current.responsible_contact;
+
     const updated = await db.run(
-      'UPDATE leads SET status = ?, updated_at = NOW() WHERE id = ? RETURNING *',
+      `UPDATE leads SET
+         name = ?, whatsapp = ?, email = ?, services = ?, business_segment = ?,
+         description = ?, instagram_url = ?, responsible_name = ?, responsible_contact = ?,
+         status = ?, updated_at = NOW()
+       WHERE id = ? RETURNING *`,
+      name,
+      whatsapp,
+      email,
+      JSON.stringify(services),
+      businessSegment,
+      description,
+      instagramUrl,
+      responsibleName,
+      responsibleContact,
       status,
       lead.id
     );
