@@ -2973,6 +2973,18 @@
         ]),
       ]),
       el('div', { class: 'product-manager-actions' }, [
+        el('div', { class: 'product-order-actions', title: 'Definir ordem no catálogo público' }, [
+          el('button', {
+            class: 'btn btn-ghost btn-icon', type: 'button', title: 'Mover solução para cima',
+            disabled: (state.products || []).indexOf(product) <= 0 ? true : null,
+            onclick: () => moveProduct(product, -1), html: icon('up'),
+          }),
+          el('button', {
+            class: 'btn btn-ghost btn-icon', type: 'button', title: 'Mover solução para baixo',
+            disabled: (state.products || []).indexOf(product) >= (state.products || []).length - 1 ? true : null,
+            onclick: () => moveProduct(product, 1), html: icon('down'),
+          }),
+        ]),
         el('button', {
           class: 'btn btn-ghost btn-sm', type: 'button',
           onclick: () => { state.productModal = { mode: 'edit', product }; render(); },
@@ -2983,6 +2995,26 @@
         }),
       ]),
     ]);
+  }
+
+  async function moveProduct(product, direction) {
+    const current = (state.products || []).slice();
+    const index = current.findIndex((item) => item.id === product.id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= current.length) return;
+    [current[index], current[target]] = [current[target], current[index]];
+    state.products = current;
+    render();
+    try {
+      await api('/products/order', {
+        method: 'PUT', body: { order: current.map((item) => item.id) },
+      });
+      toast('Ordem do catálogo atualizada.');
+    } catch (err) {
+      state.products = await api('/products').then((response) => response.products).catch(() => current);
+      render();
+      toast(err.message, true);
+    }
   }
 
   async function deleteProduct(product) {

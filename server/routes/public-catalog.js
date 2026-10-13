@@ -27,10 +27,10 @@ router.get('/:slug', ah(async (req, res) => {
   if (!account) return res.status(404).json({ error: 'Catálogo não encontrado.' });
   const rows = await db.all(
     `SELECT p.id, p.name, p.category, p.summary, p.details, p.price, p.price_details,
-            p.logo, p.images, p.updated_at, l.url AS detail_url
+            p.logo, p.images, p.sort_order, p.updated_at, l.url AS detail_url
        FROM products p
        LEFT JOIN product_catalog_links l ON l.id = p.detail_link_id AND l.user_id = p.user_id
-      WHERE p.user_id = ? AND p.is_public = 1 ORDER BY p.name ASC`,
+      WHERE p.user_id = ? AND p.is_public = 1 ORDER BY p.sort_order ASC, p.id ASC`,
     account.id
   );
   res.json({

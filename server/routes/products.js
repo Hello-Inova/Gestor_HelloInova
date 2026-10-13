@@ -65,6 +65,7 @@ function serializeProduct(row) {
     detail_link_id: row.detail_link_id || null,
     detail_link_name: row.detail_link_name || '',
     detail_url: normalizeCatalogDestinationUrl(row.detail_url) || '',
+    sort_order: Number(row.sort_order) || 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -183,7 +184,7 @@ router.get('/', ah(async (req, res) => {
     `SELECT p.*, l.name AS detail_link_name, l.url AS detail_url
        FROM products p
        LEFT JOIN product_catalog_links l ON l.id = p.detail_link_id AND l.user_id = p.user_id
-      WHERE p.user_id = ? ORDER BY p.updated_at DESC, p.id DESC`,
+      WHERE p.user_id = ? ORDER BY p.sort_order ASC, p.id ASC`,
     req.user.account_id
   );
   res.json({ products: rows.map(serializeProduct) });
@@ -193,10 +194,11 @@ router.post('/', ah(async (req, res) => {
   const validated = await validateFields(req.body || {}, null, req.user.account_id);
   if (validated.error) return res.status(400).json({ error: validated.error });
   const value = validated.value;
+  const orderRow = await db.get('SELECT COALESCE(MAX(sort_order), -1)::int AS max_order FROM products WHERE user_id = ?', req.user.account_id);
   const inserted = await db.run(
     `INSERT INTO products
-      (user_id, name, category, summary, details, observations, price, price_details, logo, images, is_public, detail_link_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      (user_id, name, category, summary, details, observations, price, price_details, logo, images, is_public, detail_link_id, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     req.user.account_id,
     value.name,
     value.category,
@@ -208,9 +210,31 @@ router.post('/', ah(async (req, res) => {
     value.logo,
     JSON.stringify(value.images),
     value.is_public,
-    value.detail_link_id
+    value.detail_link_id,
+    Number(orderRow.max_order) + 1
   );
   res.status(201).json({ product: serializeProduct(await getOwned(inserted.rows[0].id, req.user.account_id)) });
+}));
+
+router.put('/order', ah(async (req, res) => {
+  const order = Array.isArray(req.body?.order)
+    ? req.body.order.map(Number).filter((id) => Number.isInteger(id) && id > 0)
+    : [];
+  if (!order.length || new Set(order).size !== order.length) {
+    return res.status(400).json({ error: 'Ordem de soluções inválida.' });
+  }
+  const owned = await db.all('SELECT id FROM products WHERE user_id = ? ORDER BY id', req.user.account_id);
+  const ownedIds = owned.map((item) => Number(item.id));
+  if (order.length !== ownedIds.length || ownedIds.some((id) => !order.includes(id))) {
+    return res.status(400).json({ error: 'A ordem deve incluir todas as soluções cadastradas.' });
+  }
+  await Promise.all(order.map((id, index) => db.run(
+    'UPDATE products SET sort_order = ? WHERE id = ? AND user_id = ?',
+    index,
+    id,
+    req.user.account_id
+  )));
+  res.json({ ok: true });
 }));
 
 router.put('/:id', ah(async (req, res) => {

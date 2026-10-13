@@ -267,11 +267,13 @@ const SCHEMA_SQL = `
     logo TEXT DEFAULT '',
     images TEXT NOT NULL DEFAULT '[]',
     is_public INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
   CREATE INDEX IF NOT EXISTS products_user_id_idx ON products(user_id);
   ALTER TABLE products ADD COLUMN IF NOT EXISTS logo TEXT DEFAULT '';
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
 
   CREATE TABLE IF NOT EXISTS product_catalog_links (
     id SERIAL PRIMARY KEY,
