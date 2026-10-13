@@ -1995,6 +1995,7 @@ button { font-family: inherit; }
   }
   .topbar .brand-mini .wm { font-family: var(--font-display); font-weight: 800; font-size: 14px; }
   .topbar .brand-mini .wm span { color: var(--blue-400); }
+  .topbar .menu-toggle-btn { display: inline-flex !important; }
 
   .sidebar {
     position: fixed;
