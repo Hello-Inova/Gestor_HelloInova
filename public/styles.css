@@ -2568,7 +2568,12 @@ button { font-family: inherit; }
     overflow-y: auto;
     padding-right: 5px;
   }
-  .public-sites-mobile-scroll .public-site-card { height: 168px; scroll-snap-align: start; }
+  .public-sites-mobile-scroll .public-site-card {
+    flex: 0 0 168px;
+    height: 168px;
+    min-height: 168px;
+    scroll-snap-align: start;
+  }
 
   .product-catalog-scroll .product-single-scroll {
     flex: none;
