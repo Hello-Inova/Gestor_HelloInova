@@ -77,6 +77,7 @@ const SCHEMA_SQL = `
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'admin',
     module_permissions TEXT NOT NULL DEFAULT '[]',
+    is_active INTEGER NOT NULL DEFAULT 1,
     systems_seeded INTEGER NOT NULL DEFAULT 0,
     dashboard_seeded INTEGER NOT NULL DEFAULT 0,
     leads_seeded INTEGER NOT NULL DEFAULT 0,
@@ -163,6 +164,10 @@ const SCHEMA_SQL = `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS public_slug TEXT;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS module_permissions TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active INTEGER NOT NULL DEFAULT 1;
+  UPDATE pages
+     SET name = 'Controle de Usuários'
+   WHERE type = 'users' AND name <> 'Controle de Usuários';
   UPDATE users
      SET public_slug = md5(random()::text || clock_timestamp()::text || id::text)
    WHERE public_slug IS NULL OR public_slug = '';

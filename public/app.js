@@ -27,7 +27,7 @@
     systemOptions: { categories: [], niches: [], public_url: '' },
     publicSitesSearch: '',
     publicSitesNiche: '',
-    users: null, // lista de usuários da conta (módulo "Cadastro de Usuário")
+    users: null, // lista de usuários da conta (módulo "Controle de Usuários")
     userModal: false,
     forgotPasswordOpen: false, // pop-up "esqueci minha senha" (pede o e-mail)
     resetToken: null, // token vindo do link do e-mail de recuperação de senha
@@ -188,6 +188,7 @@
       users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
       link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
       globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>',
+      power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
     };
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
   }
@@ -1296,7 +1297,25 @@
         : null,
     ]);
 
-    return el('div', {}, [cards, catCard]);
+    const leadStats = data.leads_by_status || {};
+    const leadCards = el('div', { class: 'dashboard-leads-section' }, [
+      el('div', { class: 'dashboard-section-heading' }, [
+        el('div', {}, [
+          el('h3', {}, [el('span', { html: icon('target') }), ' Indicadores de Leads']),
+          el('p', {}, ['Acompanhamento comercial da captação até a conversão.']),
+        ]),
+        el('span', { class: 'dashboard-sales-badge' }, ['Visível para Vendas']),
+      ]),
+      el('div', { class: 'dashboard-cards dashboard-lead-cards' }, [
+        dashboardStatCard('users', 'Total de leads', String(data.leads_total || 0), 'Leads cadastrados na conta', 'blue'),
+        dashboardStatCard('target', 'Novos leads', String(leadStats.novo || 0), 'Aguardando primeiro contato', 'cyan'),
+        dashboardStatCard('whatsapp', 'Em contato', String(leadStats.em_contato || 0), 'Negociações em andamento', 'purple'),
+        dashboardStatCard('cash', 'Leads convertidos', String(leadStats.convertido || 0),
+          String(data.leads_conversion_rate || 0) + '% de conversão', 'green'),
+      ]),
+    ]);
+
+    return el('div', {}, [cards, leadCards, catCard]);
   }
 
   function dashboardStatCard(iconName, label, value, caption, tone) {
@@ -1323,7 +1342,7 @@
     ]);
   }
 
-  // ---------------- Cadastro de Usuário (módulo especial) ----------------
+  // ---------------- Controle de Usuários (módulo especial) ----------------
   // Só é possível criar um novo usuário a partir de uma conta já logada —
   // o novo usuário entra no mesmo espaço de trabalho compartilhado (mesmos
   // sistemas e dashboard) e passa a poder fazer login normalmente (com o
@@ -1367,6 +1386,7 @@
 
   function buildUserRow(u) {
     const isSelf = state.user && state.user.id === u.id;
+    const isProtected = isSelf || u.is_owner;
     const roleLabel = u.role === 'admin' ? 'Administrador' : 'Vendas';
     const permissionLabels = u.role === 'admin'
       ? ['Todos os módulos']
@@ -1374,21 +1394,57 @@
     const mainRow = el('div', { class: 'sysmgr-row-main' }, [
       el('div', { class: 'sysmgr-row-icon' }, [(u.name || '?').trim().charAt(0).toUpperCase()]),
       el('div', { class: 'sysmgr-row-info' }, [
-        el('div', { class: 'r-name' }, [u.name, isSelf ? el('span', { class: 'category-badge', style: 'margin-left:8px' }, ['Você']) : null]),
+        el('div', { class: 'r-name' }, [
+          u.name,
+          isSelf ? el('span', { class: 'category-badge', style: 'margin-left:8px' }, ['Você']) : null,
+          !u.is_active ? el('span', { class: 'category-badge user-inactive-badge', style: 'margin-left:8px' }, ['Inativo']) : null,
+        ]),
         el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [u.email]),
         el('div', { class: 'sysmgr-row-badges' }, [
           el('span', { class: 'category-badge user-role-badge' }, [roleLabel]),
           ...permissionLabels.map((label) => el('span', { class: 'category-badge muted' }, [label])),
         ]),
       ]),
-      !isSelf ? el('div', { class: 'sysmgr-row-main-actions' }, [
+      !isSelf ? el('div', { class: 'sysmgr-row-main-actions user-row-actions' }, [
         el('button', {
           type: 'button', class: 'btn btn-ghost btn-sm',
           onclick: () => { state.userModal = { mode: 'access', user: u }; render(); },
         }, [el('span', { html: icon('edit') }), ' Acesso']),
+        !isProtected ? el('button', {
+          type: 'button', class: 'btn btn-ghost btn-sm user-status-btn',
+          onclick: () => toggleUserStatus(u),
+        }, [el('span', { html: icon('power') }), u.is_active ? ' Inativar' : ' Ativar']) : null,
+        !isProtected ? el('button', {
+          type: 'button', class: 'btn btn-danger btn-sm',
+          onclick: () => deleteUser(u),
+        }, [el('span', { html: icon('trash') }), ' Excluir']) : null,
       ]) : null,
     ]);
     return el('div', { class: 'sysmgr-row' }, [mainRow]);
+  }
+
+  async function toggleUserStatus(user) {
+    const nextActive = !user.is_active;
+    const action = nextActive ? 'ativar' : 'inativar';
+    if (!window.confirm(`Deseja ${action} o usuário ${user.name}?`)) return;
+    try {
+      const { user: updated } = await api('/auth/users/' + user.id + '/status', {
+        method: 'PUT', body: { is_active: nextActive },
+      });
+      state.users = (state.users || []).map((item) => item.id === updated.id ? updated : item);
+      toast(nextActive ? 'Usuário ativado.' : 'Usuário inativado e sessões encerradas.');
+      render();
+    } catch (err) { toast(err.message, true); }
+  }
+
+  async function deleteUser(user) {
+    if (!window.confirm(`Excluir definitivamente o usuário ${user.name}? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await api('/auth/users/' + user.id, { method: 'DELETE' });
+      state.users = (state.users || []).filter((item) => item.id !== user.id);
+      toast('Usuário excluído.');
+      render();
+    } catch (err) { toast(err.message, true); }
   }
 
   function closeUserModal() {
@@ -1754,8 +1810,14 @@
     const segmentSelect = el('select', { class: 'leads-segment-filter', 'aria-label': 'Filtrar por ramo de negócio' }, [
       el('option', { value: '' }, ['Todos os ramos de negócio']),
     ]);
+    const segmentControl = el('div', { class: 'leads-segment-control' }, [
+      el('span', { class: 'leads-segment-icon', html: icon('sliders') }),
+      segmentSelect,
+    ]);
+    const syncSegmentStyle = () => segmentControl.classList.toggle('active', !!segmentSelect.value);
     segmentSelect.addEventListener('change', () => {
       state.leadsBusinessSegment = segmentSelect.value;
+      syncSegmentStyle();
       refreshList();
     });
     listCard.appendChild(el('div', { class: 'leads-search-row' }, [
@@ -1763,7 +1825,7 @@
         el('span', { class: 'search-icon', html: icon('search') }),
         searchInput,
       ]),
-      segmentSelect,
+      segmentControl,
     ]));
 
     // ---- Filtros por status ----
@@ -1844,6 +1906,7 @@
           state.leadsBusinessSegment = '';
           segmentSelect.value = '';
         }
+        syncSegmentStyle();
         refreshList();
       })
       .catch((err) => {

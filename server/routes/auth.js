@@ -171,6 +171,8 @@ function publicUser(row) {
     name: row.name,
     email: row.email,
     created_at: row.created_at,
+    is_active: row.is_active !== 0 && row.is_active !== false,
+    is_owner: Number(row.id) === Number(row.account_id),
     ...serializeUserAccess(row),
   };
 }
@@ -225,7 +227,7 @@ router.post(
     );
 
     // Cria os módulos iniciais fixos da conta: Gestor de Sistemas, Dashboard
-    // e Cadastro de Usuário.
+    // e Controle de Usuários.
     await db.run(
       'INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)',
       userId,
@@ -243,7 +245,7 @@ router.post(
     await db.run(
       'INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)',
       userId,
-      'Cadastro de Usuário',
+      'Controle de Usuários',
       'users',
       2
     );
@@ -331,6 +333,9 @@ router.post(
       await recordLoginAttempt(ip);
       return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
     }
+    if (!row.is_active) {
+      return res.status(403).json({ error: 'Este usuário está inativo. Procure um administrador.' });
+    }
     await db.run('DELETE FROM login_attempts WHERE ip = ?', ip);
 
     if (!row.email_verified) {
@@ -364,6 +369,7 @@ router.post(
 
     const row = await db.get('SELECT * FROM users WHERE email = ?', normalizedEmail);
     if (!row) return res.status(404).json({ error: 'Conta não encontrada.' });
+    if (!row.is_active) return res.status(403).json({ error: 'Este usuário está inativo. Procure um administrador.' });
 
     const user = loginUser(res, row);
     res.json({ user });
@@ -506,7 +512,7 @@ router.get(
   requireAuth,
   ah(async (req, res) => {
     const row = await db.get(
-      'SELECT id, name, email, role, module_permissions, created_at FROM users WHERE id = ?',
+      'SELECT id, name, email, account_id, role, module_permissions, is_active, created_at FROM users WHERE id = ?',
       req.user.id
     );
     if (!row) return res.status(401).json({ error: 'Não autenticado.' });
@@ -563,7 +569,7 @@ router.put(
     setAuthCookie(res, token);
 
     const updated = await db.get(
-      'SELECT id, name, email, role, module_permissions, created_at FROM users WHERE id = ?',
+      'SELECT id, name, email, account_id, role, module_permissions, is_active, created_at FROM users WHERE id = ?',
       current.id
     );
     res.json({ user: publicUser(updated) });
@@ -583,7 +589,7 @@ router.get(
   requireAdmin,
   ah(async (req, res) => {
     const rows = await db.all(
-      'SELECT id, name, email, role, module_permissions, created_at FROM users WHERE account_id = ? ORDER BY id ASC',
+      'SELECT id, name, email, account_id, role, module_permissions, is_active, created_at FROM users WHERE account_id = ? ORDER BY id ASC',
       req.user.account_id
     );
     res.json({ users: rows.map(publicUser), modules: MODULE_CATALOG });
@@ -611,7 +617,7 @@ router.post(
     const inserted = await db.run(
       `INSERT INTO users (name, email, password_hash, role, module_permissions, email_verified, account_id)
        VALUES (?, ?, ?, ?, ?, 1, ?)
-       RETURNING id, name, email, role, module_permissions, created_at`,
+       RETURNING id, name, email, account_id, role, module_permissions, is_active, created_at`,
       name.trim().slice(0, 200),
       normalizedEmail,
       hashPassword(password),
@@ -643,12 +649,59 @@ router.put(
     if (access.error) return res.status(400).json({ error: access.error });
     const updated = await db.run(
       `UPDATE users SET role = ?, module_permissions = ?, session_version = session_version + 1
-       WHERE id = ? RETURNING id, name, email, role, module_permissions, created_at`,
+       WHERE id = ? RETURNING id, name, email, account_id, role, module_permissions, is_active, created_at`,
       access.role,
       JSON.stringify(access.permissions),
       target.id
     );
     res.json({ user: publicUser(updated.rows[0]) });
+  })
+);
+
+router.put(
+  '/users/:id/status',
+  requireAuth,
+  requireAdmin,
+  ah(async (req, res) => {
+    const target = await db.get(
+      'SELECT * FROM users WHERE id = ? AND account_id = ?',
+      req.params.id,
+      req.user.account_id
+    );
+    if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (target.id === req.user.id || target.id === req.user.account_id) {
+      return res.status(400).json({ error: 'O usuário proprietário da conta não pode ser inativado.' });
+    }
+    if (typeof req.body?.is_active !== 'boolean') {
+      return res.status(400).json({ error: 'Informe um status válido para o usuário.' });
+    }
+    const updated = await db.run(
+      `UPDATE users SET is_active = ?, session_version = session_version + 1
+       WHERE id = ? RETURNING id, name, email, account_id, role, module_permissions, is_active, created_at`,
+      req.body.is_active ? 1 : 0,
+      target.id
+    );
+    res.json({ user: publicUser(updated.rows[0]) });
+  })
+);
+
+router.delete(
+  '/users/:id',
+  requireAuth,
+  requireAdmin,
+  ah(async (req, res) => {
+    const target = await db.get(
+      'SELECT id FROM users WHERE id = ? AND account_id = ?',
+      req.params.id,
+      req.user.account_id
+    );
+    if (!target) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (target.id === req.user.id || target.id === req.user.account_id) {
+      return res.status(400).json({ error: 'O usuário proprietário da conta não pode ser excluído.' });
+    }
+    await db.run('DELETE FROM verification_codes WHERE user_id = ?', target.id);
+    await db.run('DELETE FROM users WHERE id = ? AND account_id = ?', target.id, req.user.account_id);
+    res.status(204).end();
   })
 );
 

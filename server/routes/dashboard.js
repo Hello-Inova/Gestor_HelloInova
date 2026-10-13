@@ -24,6 +24,17 @@ router.get('/summary', ah(async (req, res) => {
     req.user.account_id
   );
   const categoriesAvailable = categoryRows.map((item) => item.name);
+  const leadRows = await db.all(
+    'SELECT status, COUNT(*)::int AS count FROM leads WHERE user_id = ? GROUP BY status',
+    req.user.account_id
+  );
+  const leadsByStatus = { novo: 0, em_contato: 0, convertido: 0, perdido: 0 };
+  leadRows.forEach((item) => {
+    if (Object.prototype.hasOwnProperty.call(leadsByStatus, item.status)) {
+      leadsByStatus[item.status] = Number(item.count) || 0;
+    }
+  });
+  const leadsTotal = Object.values(leadsByStatus).reduce((sum, count) => sum + count, 0);
 
   let subscriptionsCount = 0;
   let subscriptionsValue = 0;
@@ -79,6 +90,9 @@ router.get('/summary', ah(async (req, res) => {
     niches_in_use: nichesInUse.size,
     subscriptions_total_count: subscriptionsCount,
     subscriptions_total_value: subscriptionsValue,
+    leads_total: leadsTotal,
+    leads_by_status: leadsByStatus,
+    leads_conversion_rate: leadsTotal ? Math.round((leadsByStatus.convertido / leadsTotal) * 100) : 0,
     categories: Object.keys(categoryCounts)
       .filter((category) => categoryCounts[category] > 0)
       .sort((a, b) => a.localeCompare(b, 'pt-BR'))

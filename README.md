@@ -78,7 +78,7 @@ helloinova-manager/
 
 ## Contas e usuários
 
-Não existe mais cadastro público pela tela de login. Um novo usuário só pode ser criado por alguém que já está logado, pelo módulo fixo **"Cadastro de Usuário"** no menu — e esse novo usuário entra automaticamente na mesma conta/espaço de trabalho de quem o criou (mesmos sistemas, assinaturas e dashboard).
+Não existe mais cadastro público pela tela de login. Um novo usuário só pode ser criado por alguém que já está logado, pelo módulo fixo **"Controle de Usuários"** no menu — e esse novo usuário entra automaticamente na mesma conta/espaço de trabalho de quem o criou (mesmos sistemas, assinaturas e dashboard).
 
 A rota de backend `POST /api/auth/register` continua existindo (sem tela própria) para o caso de precisar criar, no futuro, uma conta totalmente nova e independente — ex: outra empresa usando o mesmo sistema.
 

@@ -62,10 +62,10 @@ async function requireAuth(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET, JWT_OPTIONS);
     const activeUser = await db.get(
-      'SELECT id, email, name, account_id, role, module_permissions, session_version FROM users WHERE id = ?',
+      'SELECT id, email, name, account_id, role, module_permissions, session_version, is_active FROM users WHERE id = ?',
       payload.id
     );
-    if (!activeUser || Number(payload.session_version) !== Number(activeUser.session_version)) {
+    if (!activeUser || !activeUser.is_active || Number(payload.session_version) !== Number(activeUser.session_version)) {
       clearAuthCookie(res);
       return res.status(401).json({ error: 'Sessão inválida. Faça login novamente.' });
     }
