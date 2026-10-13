@@ -52,6 +52,7 @@
     productSearch: '',
     productCategory: '',
     productModal: null,
+    productViewModal: null,
   };
 
   let deferredInstallPrompt = null;
@@ -442,6 +443,7 @@
       if (state.leadImportModal) $app.appendChild(buildLeadImportModal());
       if (state.leadImportHistoryOpen) $app.appendChild(buildLeadImportHistoryModal());
       if (state.candidateModal) $app.appendChild(buildCandidateModal());
+      if (state.productViewModal) $app.appendChild(buildProductViewModal());
       if (state.productModal) $app.appendChild(buildProductModal());
     }
     // Estes dois pop-ups funcionam por cima de qualquer tela (mesmo
@@ -2957,7 +2959,12 @@
     const image = coverImage
       ? el('img', { src: coverImage, alt: product.logo ? 'Logo de ' + product.name : product.name })
       : el('span', { class: 'product-manager-fallback', html: icon('image') });
-    return el('article', { class: 'product-manager-card' }, [
+    const card = el('article', {
+      class: 'product-manager-card product-manager-card-clickable',
+      tabindex: '0',
+      role: 'button',
+      'aria-label': 'Visualizar todos os dados de ' + product.name,
+    }, [
       el('div', { class: 'product-manager-image' + (product.logo ? ' has-logo' : '') }, [
         image,
       ]),
@@ -3001,6 +3008,126 @@
         }),
       ]),
     ]);
+    card.addEventListener('click', (event) => {
+      if (event.target.closest('button, a')) return;
+      openProductViewModal(product);
+    });
+    card.addEventListener('keydown', (event) => {
+      if (event.target !== card || (event.key !== 'Enter' && event.key !== ' ')) return;
+      event.preventDefault();
+      openProductViewModal(product);
+    });
+    return card;
+  }
+
+  function openProductViewModal(product) {
+    state.productViewModal = { product };
+    render();
+  }
+
+  function closeProductViewModal() {
+    state.productViewModal = null;
+    render();
+  }
+
+  function buildProductViewModal() {
+    const product = state.productViewModal.product;
+    const images = [product.logo, ...(Array.isArray(product.images) ? product.images : [])]
+      .filter((image, index, list) => image && list.indexOf(image) === index);
+    const mainMedia = el('div', { class: 'product-view-main-media' });
+    const thumbs = el('div', { class: 'product-view-thumbs' });
+
+    const selectImage = (imageUrl, index) => {
+      mainMedia.innerHTML = '';
+      mainMedia.appendChild(imageUrl
+        ? el('img', { src: imageUrl, alt: product.name })
+        : el('span', { class: 'product-manager-fallback', html: icon('image') }));
+      thumbs.querySelectorAll('.product-view-thumb').forEach((thumb, thumbIndex) => {
+        thumb.classList.toggle('active', thumbIndex === index);
+      });
+    };
+
+    images.forEach((imageUrl, index) => {
+      thumbs.appendChild(el('button', {
+        class: 'product-view-thumb' + (index === 0 ? ' active' : ''),
+        type: 'button',
+        'aria-label': 'Exibir imagem ' + (index + 1) + ' de ' + product.name,
+        onclick: () => selectImage(imageUrl, index),
+      }, [el('img', { src: imageUrl, alt: '' })]));
+    });
+    selectImage(images[0] || '', 0);
+
+    const gallery = el('div', { class: 'product-view-gallery' }, [
+      mainMedia,
+      images.length > 1 ? thumbs : null,
+    ]);
+    const destination = product.detail_url
+      ? el('a', { href: product.detail_url, target: '_blank', rel: 'noopener' }, [
+        product.detail_link_name || product.detail_url,
+      ])
+      : 'Nenhum link cadastrado';
+    const details = el('div', { class: 'product-view-info' }, [
+      el('div', { class: 'product-manager-meta' }, [
+        product.category ? el('span', { class: 'category-badge' }, [product.category]) : null,
+        el('span', { class: 'category-badge ' + (product.is_public ? 'status-public' : 'muted') }, [
+          product.is_public ? 'Publicado' : 'Privado',
+        ]),
+      ]),
+      el('h2', {}, [product.name]),
+      product.summary ? el('p', { class: 'product-view-summary' }, [product.summary]) : null,
+      el('div', { class: 'product-view-data-grid' }, [
+        viewField('Valor', product.price === null || product.price === undefined ? 'Valor sob consulta' : formatCurrencyBRL(product.price)),
+        viewField('Destino de “Ver detalhes”', destination),
+        viewField('Cadastrado em', product.created_at ? formatDateBR(product.created_at) : '—'),
+        viewField('Atualizado em', product.updated_at ? formatDateBR(product.updated_at) : '—'),
+      ]),
+      product.price_details ? el('section', { class: 'product-view-section' }, [
+        el('h4', {}, ['Complemento do valor']),
+        el('p', {}, [product.price_details]),
+      ]) : null,
+      product.details ? el('section', { class: 'product-view-section' }, [
+        el('h4', {}, ['Detalhes da solução']),
+        el('p', {}, [product.details]),
+      ]) : null,
+      product.observations ? el('section', { class: 'product-view-section product-view-observations' }, [
+        el('h4', {}, ['Observações internas']),
+        el('p', {}, [product.observations]),
+      ]) : null,
+    ]);
+
+    const editButton = el('button', {
+      class: 'btn btn-primary', type: 'button',
+      onclick: () => {
+        state.productViewModal = null;
+        state.productModal = { mode: 'edit', product };
+        render();
+      },
+    }, [el('span', { html: icon('edit') }), ' Editar']);
+    const deleteButton = el('button', {
+      class: 'btn btn-danger', type: 'button', onclick: () => deleteProduct(product),
+    }, [el('span', { html: icon('trash') }), ' Excluir']);
+
+    const card = el('div', { class: 'modal-card product-view-modal-card' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h3', {}, ['Detalhes da solução']),
+        el('button', {
+          class: 'btn btn-ghost btn-icon', type: 'button',
+          'aria-label': 'Fechar detalhes', onclick: closeProductViewModal, html: icon('close'),
+        }),
+      ]),
+      el('div', { class: 'modal-body product-view-modal-body' }, [gallery, details]),
+      el('div', { class: 'modal-footer product-view-modal-footer' }, [
+        deleteButton,
+        el('div', { class: 'product-view-footer-actions' }, [
+          el('button', { class: 'btn btn-ghost', type: 'button', onclick: closeProductViewModal }, ['Fechar']),
+          editButton,
+        ]),
+      ]),
+    ]);
+    return el('div', {
+      class: 'modal-overlay',
+      onclick: (event) => { if (event.target === event.currentTarget) closeProductViewModal(); },
+    }, [card]);
   }
 
   async function moveProduct(product, direction) {
@@ -3028,6 +3155,9 @@
     try {
       await api('/products/' + product.id, { method: 'DELETE' });
       state.products = (state.products || []).filter((item) => item.id !== product.id);
+      if (state.productViewModal && state.productViewModal.product.id === product.id) {
+        state.productViewModal = null;
+      }
       render();
       toast('Solução excluída.');
     } catch (err) { toast(err.message, true); }

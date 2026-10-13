@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hello-inova-shell-v37';
+const CACHE_NAME = 'hello-inova-shell-v38';
 const APP_SHELL = [
   '/',
   '/index.html',
