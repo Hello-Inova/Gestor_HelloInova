@@ -145,11 +145,16 @@
     productDialogTrigger = trigger || document.activeElement;
     dialog.innerHTML = '';
     const card = node('div', 'product-dialog-card');
+
+    const header = node('div', 'product-dialog-header');
+    header.appendChild(node('h3', '', 'Detalhes da solução'));
     const close = node('button', 'dialog-close', '×');
     close.type = 'button';
     close.setAttribute('aria-label', 'Fechar');
     close.addEventListener('click', closeProduct);
-    card.appendChild(close);
+    header.appendChild(close);
+
+    const body = node('div', 'product-dialog-body');
 
     const gallery = node('div', 'dialog-gallery');
     const main = node('div', 'dialog-main-image');
@@ -203,14 +208,41 @@
     title.id = 'product-dialog-title';
     content.appendChild(title);
     if (product.summary) content.appendChild(node('p', 'dialog-summary', product.summary));
-    if (product.details) content.appendChild(node('div', 'dialog-details', product.details));
-    const price = node('div', 'dialog-price', priceLabel(product));
-    if (product.price_details) price.appendChild(node('small', '', product.price_details));
-    content.appendChild(price);
-    const contact = node('a', 'dialog-cta', 'Quero saber mais ↗');
+
+    const dataGrid = node('div', 'dialog-data-grid');
+    const priceItem = node('div', 'dialog-data-item');
+    priceItem.appendChild(node('span', 'dialog-data-label', 'Valor'));
+    priceItem.appendChild(node('strong', 'dialog-price', priceLabel(product)));
+    const categoryItem = node('div', 'dialog-data-item');
+    categoryItem.appendChild(node('span', 'dialog-data-label', 'Categoria'));
+    categoryItem.appendChild(node('strong', '', product.category || 'Solução digital'));
+    dataGrid.append(priceItem, categoryItem);
+    content.appendChild(dataGrid);
+
+    if (product.price_details) {
+      const priceDetails = node('section', 'dialog-section');
+      priceDetails.appendChild(node('h4', '', 'Complemento do valor'));
+      priceDetails.appendChild(node('p', '', product.price_details));
+      content.appendChild(priceDetails);
+    }
+    if (product.details) {
+      const details = node('section', 'dialog-section');
+      details.appendChild(node('h4', '', 'Detalhes da solução'));
+      details.appendChild(node('p', '', product.details));
+      content.appendChild(details);
+    }
+
+    body.append(gallery, content);
+
+    const footer = node('div', 'product-dialog-footer');
+    const footerClose = node('button', 'dialog-footer-close', 'Fechar');
+    footerClose.type = 'button';
+    footerClose.addEventListener('click', closeProduct);
+    const contact = node('a', 'dialog-cta', 'Contatar ↗');
     contact.href = product.detail_url || '/captacao';
-    content.appendChild(contact);
-    card.append(gallery, content);
+    footer.append(footerClose, contact);
+
+    card.append(header, body, footer);
     dialog.appendChild(card);
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
