@@ -2563,7 +2563,8 @@ button { font-family: inherit; }
 
   .public-sites-scroll .public-sites-mobile-scroll {
     flex: none;
-    max-height: min(348px, 60dvh);
+    /* Dois cards completos (2 x 168px) mais o espaço de 12px entre eles. */
+    max-height: 348px;
     overflow-y: auto;
     padding-right: 5px;
   }
