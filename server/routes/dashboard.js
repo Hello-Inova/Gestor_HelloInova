@@ -24,9 +24,11 @@ router.get('/summary', ah(async (req, res) => {
     req.user.account_id
   );
   const categoriesAvailable = categoryRows.map((item) => item.name);
+  // Leads são uma caixa de entrada global no modelo mono-tenant atual e,
+  // portanto, a tabela não possui user_id/account_id. Filtrar por user_id
+  // derrubava todo o resumo do Dashboard com erro de coluna inexistente.
   const leadRows = await db.all(
-    'SELECT status, COUNT(*)::int AS count FROM leads WHERE user_id = ? GROUP BY status',
-    req.user.account_id
+    'SELECT status, COUNT(*)::int AS count FROM leads GROUP BY status'
   );
   const leadsByStatus = { novo: 0, em_contato: 0, convertido: 0, perdido: 0 };
   leadRows.forEach((item) => {
