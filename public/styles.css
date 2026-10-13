@@ -2248,11 +2248,56 @@ button { font-family: inherit; }
   background: rgba(255, 84, 112, 0.06);
 }
 .lead-import-errors strong { color: var(--danger); font-size: 13px; }
+.lead-import-history-card { flex: 0 0 auto; }
+.lead-import-history-list {
+  display: flex;
+  max-height: 280px;
+  flex-direction: column;
+  gap: 9px;
+  overflow-y: auto;
+  padding-right: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(96,140,255,.42) rgba(255,255,255,.035);
+}
+.lead-import-history-row {
+  display: grid;
+  grid-template-columns: 38px minmax(190px, 1fr) minmax(180px, auto) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(6,11,22,.72);
+}
+.lead-import-history-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(47,123,255,.12);
+  color: var(--blue-400);
+}
+.lead-import-history-info { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lead-import-history-info strong,
+.lead-import-history-info span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lead-import-history-info strong { color: var(--text-0); font-size: 13px; }
+.lead-import-history-info span { color: var(--text-2); font-size: 10.5px; }
+.lead-import-history-counts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.lead-import-history-empty { padding: 18px 10px; }
 
 @media (max-width: 560px) {
   .lead-import-picker { align-items: stretch; flex-direction: column; }
   .lead-import-picker .btn { justify-content: center; }
   .lead-import-summary { grid-template-columns: 1fr; }
+  .lead-import-history-list { max-height: 330px; }
+  .lead-import-history-row {
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: start;
+  }
+  .lead-import-history-counts,
+  .lead-import-history-row > .btn { grid-column: 2; justify-content: flex-start; }
+  .lead-import-history-row > .btn { width: 100%; justify-content: center; }
 }
 
 /* ============================================================

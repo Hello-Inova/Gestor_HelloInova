@@ -237,11 +237,32 @@ router.post(
         uniqueLeads.push(lead);
       });
 
+      const batchResult = await client.query(
+        `INSERT INTO lead_import_batches
+           (account_id, file_name, sheet_name, imported_count, duplicate_count, rejected_count,
+            total_rows, imported_by_user_id, imported_by_name, imported_by_email)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING *`,
+        [
+          req.user.account_id,
+          fileName.trim().slice(0, 255),
+          String(parsed.sheetName || '').slice(0, 200),
+          uniqueLeads.length,
+          duplicateErrors.length,
+          parsed.errors.length,
+          parsed.totalRows,
+          req.user.id,
+          req.user.name,
+          req.user.email,
+        ]
+      );
+      const importBatch = batchResult.rows[0];
+
       let importedRows = [];
       if (uniqueLeads.length) {
         const params = [];
         const valueGroups = uniqueLeads.map((lead, rowIndex) => {
-          const offset = rowIndex * 13;
+          const offset = rowIndex * 14;
           params.push(
             lead.name,
             lead.whatsapp,
@@ -255,15 +276,16 @@ router.post(
             lead.responsible_contact,
             lead.source,
             lead.step_completed,
-            lead.status
+            lead.status,
+            importBatch.id
           );
-          return `(${Array.from({ length: 13 }, (_, index) => `$${offset + index + 1}`).join(', ')})`;
+          return `(${Array.from({ length: 14 }, (_, index) => `$${offset + index + 1}`).join(', ')})`;
         });
         const inserted = await client.query(
           `INSERT INTO leads
              (name, whatsapp, email, services, business_segment, business_segment_other,
               description, instagram_url, responsible_name, responsible_contact,
-              source, step_completed, status)
+               source, step_completed, status, import_batch_id)
            VALUES ${valueGroups.join(', ')}
            RETURNING *`,
           params
@@ -278,6 +300,7 @@ router.post(
         rejected_count: parsed.errors.length,
         total_rows: parsed.totalRows,
         sheet_name: parsed.sheetName,
+        import_batch: importBatch,
         errors: [...parsed.errors, ...duplicateErrors].slice(0, 50),
         leads: importedRows.map(serializeLead),
       });
@@ -287,6 +310,50 @@ router.post(
     } finally {
       client.release();
     }
+  })
+);
+
+router.get(
+  '/imports',
+  requireAuth,
+  requireAnyModule('leads'),
+  ah(async (req, res) => {
+    const batches = await db.all(
+      `SELECT b.*,
+              COUNT(l.id)::int AS current_lead_count
+         FROM lead_import_batches b
+         LEFT JOIN leads l ON l.import_batch_id = b.id
+        WHERE b.account_id = ?
+        GROUP BY b.id
+        ORDER BY b.created_at DESC, b.id DESC`,
+      req.user.account_id
+    );
+    res.json({ imports: batches });
+  })
+);
+
+router.delete(
+  '/imports/:id',
+  requireAuth,
+  requireAnyModule('leads'),
+  ah(async (req, res) => {
+    const batch = await db.get(
+      `SELECT b.*, COUNT(l.id)::int AS current_lead_count
+         FROM lead_import_batches b
+         LEFT JOIN leads l ON l.import_batch_id = b.id
+        WHERE b.id = ? AND b.account_id = ?
+        GROUP BY b.id`,
+      req.params.id,
+      req.user.account_id
+    );
+    if (!batch) return res.status(404).json({ error: 'Pacote de importação não encontrado.' });
+
+    await db.run(
+      'DELETE FROM lead_import_batches WHERE id = ? AND account_id = ?',
+      batch.id,
+      req.user.account_id
+    );
+    res.json({ ok: true, deleted_leads: Number(batch.current_lead_count) || 0 });
   })
 );
 

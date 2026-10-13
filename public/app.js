@@ -35,6 +35,7 @@
     leadsSearch: '',
     leadsFilterStatus: [],
     leadsBusinessSegment: '',
+    leadImports: null,
     logsSelectedUserId: null,
     logsActionFilter: '',
     logsSearch: '',
@@ -2005,6 +2006,19 @@
     const wrap = el('div', { class: 'canvas-scroll' });
     const inner = el('div', { class: 'sysmgr' });
 
+    const importHistoryBody = el('div', { class: 'lead-import-history-list' }, [
+      el('div', { class: 'dashboard-loading' }, ['Carregando histórico de importações…']),
+    ]);
+    const importHistoryCard = el('div', { class: 'sysmgr-card lead-import-history-card' }, [
+      el('div', { class: 'sysmgr-header-row' }, [
+        el('div', { class: 'htext' }, [
+          el('h3', {}, [el('span', { html: icon('upload') }), ' Histórico de importações']),
+          el('p', { class: 'sysmgr-sub' }, ['Pacotes importados pelo Excel. Excluir um pacote também remove todos os leads vinculados a ele.']),
+        ]),
+      ]),
+      importHistoryBody,
+    ]);
+
     const listCard = el('div', { class: 'sysmgr-card grow' });
     listCard.appendChild(el('div', { class: 'sysmgr-header-row' }, [
       el('div', { class: 'htext' }, [
@@ -2070,6 +2084,63 @@
     ]);
     listCard.appendChild(listBody);
 
+    function renderImportHistory() {
+      importHistoryBody.innerHTML = '';
+      const imports = state.leadImports || [];
+      if (!imports.length) {
+        importHistoryBody.appendChild(el('div', { class: 'sysmgr-empty lead-import-history-empty' }, [
+          'Nenhum pacote registrado. O histórico será criado nas próximas importações.',
+        ]));
+        return;
+      }
+      imports.forEach((batch) => {
+        const currentCount = Number(batch.current_lead_count) || 0;
+        const originalCount = Number(batch.imported_count) || 0;
+        const deleteButton = el('button', {
+          class: 'btn btn-danger btn-sm', type: 'button',
+          title: 'Excluir pacote e seus leads',
+        }, [el('span', { html: icon('trash') }), ' Excluir pacote']);
+        deleteButton.addEventListener('click', async () => {
+          const message = currentCount
+            ? `Excluir o pacote "${batch.file_name}" e seus ${currentCount} lead${currentCount === 1 ? '' : 's'}? Esta ação não pode ser desfeita.`
+            : `Excluir o registro do pacote "${batch.file_name}"? Ele não possui mais leads vinculados.`;
+          if (!window.confirm(message)) return;
+          deleteButton.disabled = true;
+          try {
+            const result = await api('/leads/imports/' + batch.id, { method: 'DELETE' });
+            state.leadImports = (state.leadImports || []).filter((item) => item.id !== batch.id);
+            if (state.leads) {
+              state.leads = state.leads.filter((lead) => Number(lead.import_batch_id) !== Number(batch.id));
+            }
+            renderImportHistory();
+            refreshList();
+            const deleted = Number(result.deleted_leads) || 0;
+            toast(deleted
+              ? `Pacote excluído com ${deleted} lead${deleted === 1 ? '' : 's'}.`
+              : 'Registro da importação excluído.');
+          } catch (err) {
+            deleteButton.disabled = false;
+            toast(err.message, true);
+          }
+        });
+        importHistoryBody.appendChild(el('div', { class: 'lead-import-history-row' }, [
+          el('div', { class: 'lead-import-history-icon', html: icon('file') }),
+          el('div', { class: 'lead-import-history-info' }, [
+            el('strong', {}, [batch.file_name || 'Planilha importada']),
+            el('span', {}, [
+              `${formatDateTimeBR(batch.created_at)} • ${batch.imported_by_name || 'Usuário'} • Aba ${batch.sheet_name || '—'}`,
+            ]),
+          ]),
+          el('div', { class: 'lead-import-history-counts' }, [
+            el('span', { class: 'category-badge' }, [`${currentCount} de ${originalCount} leads ativos`]),
+            Number(batch.duplicate_count) ? el('span', { class: 'category-badge muted' }, [`${batch.duplicate_count} duplicados`]) : null,
+            Number(batch.rejected_count) ? el('span', { class: 'category-badge user-inactive-badge' }, [`${batch.rejected_count} inválidos`]) : null,
+          ]),
+          deleteButton,
+        ]));
+      });
+    }
+
     function applyFilters() {
       const all = state.leads || [];
       const term = (state.leadsSearch || '').trim().toLowerCase();
@@ -2131,6 +2202,19 @@
         listBody.appendChild(el('div', { class: 'dashboard-error' }, ['Não foi possível carregar os leads: ' + err.message]));
       });
 
+    api('/leads/imports')
+      .then(({ imports }) => {
+        state.leadImports = imports || [];
+        renderImportHistory();
+      })
+      .catch((err) => {
+        importHistoryBody.innerHTML = '';
+        importHistoryBody.appendChild(el('div', { class: 'dashboard-error' }, [
+          'Não foi possível carregar o histórico de importações: ' + err.message,
+        ]));
+      });
+
+    inner.appendChild(importHistoryCard);
     inner.appendChild(listCard);
     wrap.appendChild(inner);
     return wrap;

@@ -204,6 +204,23 @@ const SCHEMA_SQL = `
     UNIQUE(account_id, kind, name)
   );
 
+  CREATE TABLE IF NOT EXISTS lead_import_batches (
+    id BIGSERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    file_name TEXT NOT NULL,
+    sheet_name TEXT DEFAULT '',
+    imported_count INTEGER NOT NULL DEFAULT 0,
+    duplicate_count INTEGER NOT NULL DEFAULT 0,
+    rejected_count INTEGER NOT NULL DEFAULT 0,
+    total_rows INTEGER NOT NULL DEFAULT 0,
+    imported_by_user_id INTEGER NOT NULL,
+    imported_by_name TEXT NOT NULL,
+    imported_by_email TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS lead_import_batches_account_date_idx
+    ON lead_import_batches(account_id, created_at DESC);
+
   -- Leads captados pelo formulário público (public/captacao.html). Tabela
   -- sem "user_id"/"account_id": o formulário público não tem contexto de
   -- autenticação para atribuir o lead a uma conta específica, então os
@@ -230,7 +247,9 @@ const SCHEMA_SQL = `
   ALTER TABLE leads ADD COLUMN IF NOT EXISTS instagram_url TEXT DEFAULT '';
   ALTER TABLE leads ADD COLUMN IF NOT EXISTS responsible_name TEXT DEFAULT '';
   ALTER TABLE leads ADD COLUMN IF NOT EXISTS responsible_contact TEXT DEFAULT '';
+  ALTER TABLE leads ADD COLUMN IF NOT EXISTS import_batch_id BIGINT REFERENCES lead_import_batches(id) ON DELETE CASCADE;
   CREATE INDEX IF NOT EXISTS leads_public_token_hash_idx ON leads(public_token_hash);
+  CREATE INDEX IF NOT EXISTS leads_import_batch_idx ON leads(import_batch_id);
 
   CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,
