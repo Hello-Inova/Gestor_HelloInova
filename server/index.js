@@ -57,6 +57,29 @@ app.use('/api/products', express.json({ limit: '5mb' }), productRoutes);
 app.use('/api/public-catalog', express.json({ limit: '64kb' }), publicCatalogRoutes);
 app.use('/api/logs', express.json({ limit: '64kb' }), logRoutes);
 
+// O endereço dedicado do catálogo deve abrir a vitrine pública diretamente,
+// sem expor a tela de login do Gestor. O slug é buscado no banco para não
+// depender de um identificador fixo no código.
+app.get('/', async (req, res, next) => {
+  if (String(req.hostname || '').toLowerCase() !== 'catalogo-hello-inova.vercel.app') return next();
+  try {
+    const account = await db.get(
+      `SELECT public_slug
+         FROM users
+        WHERE id = account_id AND public_slug IS NOT NULL
+        ORDER BY id ASC
+        LIMIT 1`
+    );
+    if (!account || !/^[a-f0-9]{32}$/.test(String(account.public_slug || ''))) {
+      return res.status(404).type('text/plain').send('Catálogo não encontrado.');
+    }
+    res.set('Cache-Control', 'no-store');
+    return res.redirect(302, `/catalogo/${account.public_slug}`);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 // Frontend estático — precisa estar em public/** na raiz do projeto (a
 // Vercel serve esse diretório direto pela CDN e ignora express.static() nas
 // funções serverless; localmente o express.static abaixo cobre o mesmo
