@@ -27,6 +27,7 @@
     systemOptions: { categories: [], niches: [], public_url: '' },
     publicSitesSearch: '',
     publicSitesNiche: '',
+    dashboardView: 'business',
     users: null, // lista de usuários da conta (módulo "Controle de Usuários")
     userModal: false,
     forgotPasswordOpen: false, // pop-up "esqueci minha senha" (pede o e-mail)
@@ -36,6 +37,7 @@
     leadsFilterStatus: [],
     leadsBusinessSegment: '',
     leadImports: null,
+    leadImportHistoryOpen: false,
     logsSelectedUserId: null,
     logsActionFilter: '',
     logsSearch: '',
@@ -438,6 +440,7 @@
       if (state.userModal) $app.appendChild(buildUserModal());
       if (state.leadModal) $app.appendChild(buildLeadModal());
       if (state.leadImportModal) $app.appendChild(buildLeadImportModal());
+      if (state.leadImportHistoryOpen) $app.appendChild(buildLeadImportHistoryModal());
       if (state.candidateModal) $app.appendChild(buildCandidateModal());
       if (state.productModal) $app.appendChild(buildProductModal());
     }
@@ -1291,7 +1294,7 @@
   }
 
   function buildDashboardContent(data) {
-    const cards = el('div', { class: 'dashboard-cards' }, [
+    const businessCards = el('div', { class: 'dashboard-cards' }, [
       dashboardStatCard('server', 'Sistemas cadastrados', String(data.systems_total || 0), 'Total no Gestor', 'blue'),
       dashboardStatCard('globe', 'Projetos publicados', String(data.systems_public_total || 0),
         String(data.niches_in_use || 0) + ((data.niches_in_use || 0) === 1 ? ' nicho em uso' : ' nichos em uso'), 'cyan'),
@@ -1315,7 +1318,7 @@
     ]);
 
     const leadStats = data.leads_by_status || {};
-    const leadCards = el('div', { class: 'dashboard-leads-section' }, [
+    const leadPanel = el('div', { class: 'dashboard-leads-section' }, [
       el('div', { class: 'dashboard-section-heading' }, [
         el('div', {}, [
           el('h3', {}, [el('span', { html: icon('target') }), ' Indicadores de Leads']),
@@ -1332,7 +1335,35 @@
       ]),
     ]);
 
-    return el('div', {}, [cards, leadCards, catCard]);
+    const businessPanel = el('div', { class: 'dashboard-panel' }, [businessCards, catCard]);
+    const panels = el('div', { class: 'dashboard-panel-wrap' });
+    const tabs = el('div', { class: 'dashboard-view-tabs', role: 'tablist', 'aria-label': 'Indicadores do Dashboard' });
+
+    function showView(view) {
+      state.dashboardView = view === 'leads' ? 'leads' : 'business';
+      panels.innerHTML = '';
+      panels.appendChild(state.dashboardView === 'leads' ? leadPanel : businessPanel);
+      tabs.querySelectorAll('button').forEach((button) => {
+        const active = button.dataset.view === state.dashboardView;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    }
+
+    [
+      { view: 'business', label: 'Negócios', iconName: 'server' },
+      { view: 'leads', label: 'Leads', iconName: 'target' },
+    ].forEach((item) => {
+      const button = el('button', {
+        class: 'dashboard-view-tab', type: 'button', role: 'tab',
+        'data-view': item.view,
+        onclick: () => showView(item.view),
+      }, [el('span', { html: icon(item.iconName) }), item.label]);
+      tabs.appendChild(button);
+    });
+    showView(state.dashboardView);
+
+    return el('div', {}, [tabs, panels]);
   }
 
   function dashboardStatCard(iconName, label, value, caption, tone) {
@@ -1630,13 +1661,9 @@
     const userSelect = el('select', { class: 'audit-filter-control', 'aria-label': 'Selecionar usuário' }, [
       el('option', { value: '' }, ['Carregando usuários…']),
     ]);
-    const actionListId = 'audit-action-type-suggestions';
-    const actionInput = el('input', {
-      type: 'search', class: 'audit-filter-control', list: actionListId,
-      placeholder: 'Digite o tipo de ação…', value: state.logsActionFilter || '',
-      autocomplete: 'off',
-    });
-    const actionOptions = el('datalist', { id: actionListId });
+    const actionSelect = el('select', {
+      class: 'audit-filter-control', 'aria-label': 'Filtrar por tipo de ação',
+    }, [el('option', { value: '' }, ['Todas as ações'])]);
     const searchInput = el('input', {
       type: 'search', class: 'audit-filter-control',
       placeholder: 'Pesquisar na descrição ou rota…', value: state.logsSearch || '',
@@ -1656,7 +1683,7 @@
       ]),
       el('div', { class: 'audit-filters' }, [
         el('label', { class: 'audit-filter-field' }, [el('span', {}, ['Usuário']), userSelect]),
-        el('label', { class: 'audit-filter-field' }, [el('span', {}, ['Tipo de ação']), actionInput, actionOptions]),
+        el('label', { class: 'audit-filter-field' }, [el('span', {}, ['Tipo de ação']), actionSelect]),
         el('label', { class: 'audit-filter-field' }, [el('span', {}, ['Pesquisa']), searchInput]),
       ]),
     ]);
@@ -1707,11 +1734,12 @@
 
     function renderLogRow(log) {
       const failed = Number(log.status_code) >= 400;
+      const actionLabel = log.action_type === 'Criação' ? 'Cadastro' : log.action_type;
       return el('div', { class: 'audit-log-row' + (failed ? ' failed' : '') }, [
         el('div', { class: 'audit-log-marker', html: icon(failed ? 'info' : 'shield') }),
         el('div', { class: 'audit-log-content' }, [
           el('div', { class: 'audit-log-title' }, [
-            el('span', { class: 'category-badge audit-action-badge' }, [log.action_type]),
+            el('span', { class: 'category-badge audit-action-badge' }, [actionLabel]),
             el('strong', {}, [log.description]),
           ]),
           el('div', { class: 'audit-log-route' }, [log.method + ' ' + log.path]),
@@ -1724,11 +1752,13 @@
     }
 
     async function loadActionTypes() {
-      actionOptions.innerHTML = '';
+      actionSelect.innerHTML = '';
+      actionSelect.appendChild(el('option', { value: '' }, ['Todas as ações']));
       if (!userSelect.value) return;
       try {
         const data = await api('/logs/action-types?user_id=' + encodeURIComponent(userSelect.value));
-        (data.action_types || []).forEach((type) => actionOptions.appendChild(el('option', { value: type })));
+        (data.action_types || []).forEach((type) => actionSelect.appendChild(el('option', { value: type }, [type])));
+        actionSelect.value = state.logsActionFilter || '';
       } catch (err) { toast(err.message, true); }
     }
 
@@ -1776,14 +1806,14 @@
     userSelect.addEventListener('change', async () => {
       state.logsSelectedUserId = Number(userSelect.value) || null;
       state.logsActionFilter = '';
-      actionInput.value = '';
+      actionSelect.value = '';
       renderUserSummary();
       await loadActionTypes();
       loadLogs(true);
     });
-    actionInput.addEventListener('input', () => {
-      state.logsActionFilter = actionInput.value.trim();
-      scheduleFilter();
+    actionSelect.addEventListener('change', () => {
+      state.logsActionFilter = actionSelect.value;
+      loadLogs(true);
     });
     searchInput.addEventListener('input', () => {
       state.logsSearch = searchInput.value.trim();
@@ -1900,7 +1930,9 @@
         method: 'POST',
         body: { file_name: file.name, file_data: fileData },
       });
-      state.leads = [...(result.leads || []), ...(state.leads || [])];
+      const changedLeads = result.leads || [];
+      const changedIds = new Set(changedLeads.map((lead) => Number(lead.id)));
+      state.leads = [...changedLeads, ...(state.leads || []).filter((lead) => !changedIds.has(Number(lead.id)))];
       state.leadImportModal = { file: null, processing: false, result, error: '' };
       render();
     } catch (err) {
@@ -1932,7 +1964,8 @@
         el('div', { class: 'modal-body' }, [
           el('div', { class: 'lead-import-summary' }, [
             el('div', { class: 'lead-import-stat success' }, [el('strong', {}, [String(result.imported_count)]), el('span', {}, ['Importados'])]),
-            el('div', { class: 'lead-import-stat warning' }, [el('strong', {}, [String(result.duplicate_count)]), el('span', {}, ['Duplicados'])]),
+            el('div', { class: 'lead-import-stat success' }, [el('strong', {}, [String(result.updated_count || 0)]), el('span', {}, ['Atualizados'])]),
+            el('div', { class: 'lead-import-stat warning' }, [el('strong', {}, [String(result.duplicate_count)]), el('span', {}, ['Repetidos na planilha'])]),
             el('div', { class: 'lead-import-stat danger' }, [el('strong', {}, [String(result.rejected_count)]), el('span', {}, ['Inválidos'])]),
           ]),
           issueList,
@@ -1985,7 +2018,7 @@
           el('span', { class: 'btn btn-ghost' }, [el('span', { html: icon('upload') }), ' Selecionar .XLS ou .XLSX']),
           selectedName,
         ]),
-        el('p', { class: 'field-hint lead-import-limit' }, ['Até 1.000 leads e 2,5 MB por arquivo. Duplicados por e-mail + WhatsApp serão ignorados.']),
+        el('p', { class: 'field-hint lead-import-limit' }, ['Até 1.000 leads e 2,5 MB por arquivo. Se e-mail + WhatsApp já existirem, os dados do lead serão atualizados.']),
         modalState.error ? el('div', { class: 'dashboard-error lead-import-error' }, [modalState.error]) : null,
         shownErrors.length ? el('ul', { class: 'lead-import-inline-errors' }, shownErrors.map((issue) =>
           el('li', {}, [(issue.row ? `Linha ${issue.row}: ` : '') + issue.message])
@@ -2002,22 +2035,108 @@
     }, [card]);
   }
 
+  function openLeadImportHistory() {
+    state.leadImportHistoryOpen = true;
+    state.leadImports = null;
+    render();
+  }
+
+  function closeLeadImportHistory() {
+    state.leadImportHistoryOpen = false;
+    render();
+  }
+
+  function buildLeadImportHistoryModal() {
+    const historyBody = el('div', { class: 'lead-import-history-list lead-import-history-modal-list' }, [
+      el('div', { class: 'dashboard-loading' }, ['Carregando histórico de importações…']),
+    ]);
+
+    function renderHistory() {
+      historyBody.innerHTML = '';
+      const imports = state.leadImports || [];
+      if (!imports.length) {
+        historyBody.appendChild(el('div', { class: 'sysmgr-empty lead-import-history-empty' }, [
+          'Nenhum pacote registrado. O histórico será criado nas próximas importações.',
+        ]));
+        return;
+      }
+      imports.forEach((batch) => {
+        const currentCount = Number(batch.current_lead_count) || 0;
+        const importedCount = Number(batch.imported_count) || 0;
+        const updatedCount = Number(batch.updated_count) || 0;
+        const deleteButton = el('button', {
+          class: 'btn btn-danger btn-sm', type: 'button',
+          title: 'Excluir pacote e os leads novos cadastrados por ele',
+        }, [el('span', { html: icon('trash') }), ' Excluir pacote']);
+        deleteButton.addEventListener('click', async () => {
+          const message = currentCount
+            ? `Excluir o pacote "${batch.file_name}" e seus ${currentCount} lead${currentCount === 1 ? '' : 's'} novo${currentCount === 1 ? '' : 's'}? Leads apenas atualizados por este pacote serão preservados.`
+            : `Excluir o registro do pacote "${batch.file_name}"? Leads atualizados por ele serão preservados.`;
+          if (!window.confirm(message)) return;
+          deleteButton.disabled = true;
+          try {
+            const result = await api('/leads/imports/' + batch.id, { method: 'DELETE' });
+            state.leadImports = (state.leadImports || []).filter((item) => item.id !== batch.id);
+            if (state.leads) {
+              state.leads = state.leads.filter((lead) => Number(lead.import_batch_id) !== Number(batch.id));
+            }
+            renderHistory();
+            const deleted = Number(result.deleted_leads) || 0;
+            toast(deleted
+              ? `Pacote excluído com ${deleted} lead${deleted === 1 ? '' : 's'} novo${deleted === 1 ? '' : 's'}.`
+              : 'Registro da importação excluído.');
+          } catch (err) {
+            deleteButton.disabled = false;
+            toast(err.message, true);
+          }
+        });
+        historyBody.appendChild(el('div', { class: 'lead-import-history-row' }, [
+          el('div', { class: 'lead-import-history-icon', html: icon('file') }),
+          el('div', { class: 'lead-import-history-info' }, [
+            el('strong', {}, [batch.file_name || 'Planilha importada']),
+            el('span', {}, [
+              `${formatDateTimeBR(batch.created_at)} • ${batch.imported_by_name || 'Usuário'} • Aba ${batch.sheet_name || '—'}`,
+            ]),
+          ]),
+          el('div', { class: 'lead-import-history-counts' }, [
+            el('span', { class: 'category-badge' }, [`${currentCount} de ${importedCount} novos ativos`]),
+            updatedCount ? el('span', { class: 'category-badge muted' }, [`${updatedCount} atualizados`]) : null,
+            Number(batch.duplicate_count) ? el('span', { class: 'category-badge muted' }, [`${batch.duplicate_count} repetidos na planilha`]) : null,
+            Number(batch.rejected_count) ? el('span', { class: 'category-badge user-inactive-badge' }, [`${batch.rejected_count} inválidos`]) : null,
+          ]),
+          deleteButton,
+        ]));
+      });
+    }
+
+    api('/leads/imports')
+      .then(({ imports }) => {
+        state.leadImports = imports || [];
+        renderHistory();
+      })
+      .catch((err) => {
+        historyBody.innerHTML = '';
+        historyBody.appendChild(el('div', { class: 'dashboard-error' }, [
+          'Não foi possível carregar o histórico de importações: ' + err.message,
+        ]));
+      });
+
+    const card = el('div', { class: 'modal-card modal-card-fullscreen lead-import-history-modal' }, [
+      el('div', { class: 'modal-header' }, [
+        el('div', {}, [
+          el('h3', {}, ['Histórico de importações']),
+          el('p', { class: 'sysmgr-sub' }, ['Pacotes importados pelo Excel e seus resultados.']),
+        ]),
+        el('button', { class: 'btn btn-ghost btn-icon', type: 'button', onclick: closeLeadImportHistory, html: icon('close') }),
+      ]),
+      el('div', { class: 'modal-body view-modal-body lead-import-history-modal-body' }, [historyBody]),
+    ]);
+    return el('div', { class: 'modal-overlay modal-overlay-fullscreen' }, [card]);
+  }
+
   function buildLeadsManager() {
     const wrap = el('div', { class: 'canvas-scroll' });
     const inner = el('div', { class: 'sysmgr' });
-
-    const importHistoryBody = el('div', { class: 'lead-import-history-list' }, [
-      el('div', { class: 'dashboard-loading' }, ['Carregando histórico de importações…']),
-    ]);
-    const importHistoryCard = el('div', { class: 'sysmgr-card lead-import-history-card' }, [
-      el('div', { class: 'sysmgr-header-row' }, [
-        el('div', { class: 'htext' }, [
-          el('h3', {}, [el('span', { html: icon('upload') }), ' Histórico de importações']),
-          el('p', { class: 'sysmgr-sub' }, ['Pacotes importados pelo Excel. Excluir um pacote também remove todos os leads vinculados a ele.']),
-        ]),
-      ]),
-      importHistoryBody,
-    ]);
 
     const listCard = el('div', { class: 'sysmgr-card grow' });
     listCard.appendChild(el('div', { class: 'sysmgr-header-row' }, [
@@ -2025,6 +2144,10 @@
         el('h3', {}, [el('span', { html: icon('target') }), ' Leads captados']),
         el('p', { class: 'sysmgr-sub' }, ['Pessoas que preencheram o formulário público de captação.']),
       ]),
+      el('button', {
+        class: 'btn btn-ghost btn-sm lead-import-history-trigger', type: 'button',
+        title: 'Abrir histórico de importações', onclick: openLeadImportHistory,
+      }, [el('span', { html: icon('layers') }), el('span', {}, ['Importações'])]),
     ]));
 
     // ---- Pesquisa ----
@@ -2083,63 +2206,6 @@
       el('div', { class: 'dashboard-loading' }, ['Carregando leads…']),
     ]);
     listCard.appendChild(listBody);
-
-    function renderImportHistory() {
-      importHistoryBody.innerHTML = '';
-      const imports = state.leadImports || [];
-      if (!imports.length) {
-        importHistoryBody.appendChild(el('div', { class: 'sysmgr-empty lead-import-history-empty' }, [
-          'Nenhum pacote registrado. O histórico será criado nas próximas importações.',
-        ]));
-        return;
-      }
-      imports.forEach((batch) => {
-        const currentCount = Number(batch.current_lead_count) || 0;
-        const originalCount = Number(batch.imported_count) || 0;
-        const deleteButton = el('button', {
-          class: 'btn btn-danger btn-sm', type: 'button',
-          title: 'Excluir pacote e seus leads',
-        }, [el('span', { html: icon('trash') }), ' Excluir pacote']);
-        deleteButton.addEventListener('click', async () => {
-          const message = currentCount
-            ? `Excluir o pacote "${batch.file_name}" e seus ${currentCount} lead${currentCount === 1 ? '' : 's'}? Esta ação não pode ser desfeita.`
-            : `Excluir o registro do pacote "${batch.file_name}"? Ele não possui mais leads vinculados.`;
-          if (!window.confirm(message)) return;
-          deleteButton.disabled = true;
-          try {
-            const result = await api('/leads/imports/' + batch.id, { method: 'DELETE' });
-            state.leadImports = (state.leadImports || []).filter((item) => item.id !== batch.id);
-            if (state.leads) {
-              state.leads = state.leads.filter((lead) => Number(lead.import_batch_id) !== Number(batch.id));
-            }
-            renderImportHistory();
-            refreshList();
-            const deleted = Number(result.deleted_leads) || 0;
-            toast(deleted
-              ? `Pacote excluído com ${deleted} lead${deleted === 1 ? '' : 's'}.`
-              : 'Registro da importação excluído.');
-          } catch (err) {
-            deleteButton.disabled = false;
-            toast(err.message, true);
-          }
-        });
-        importHistoryBody.appendChild(el('div', { class: 'lead-import-history-row' }, [
-          el('div', { class: 'lead-import-history-icon', html: icon('file') }),
-          el('div', { class: 'lead-import-history-info' }, [
-            el('strong', {}, [batch.file_name || 'Planilha importada']),
-            el('span', {}, [
-              `${formatDateTimeBR(batch.created_at)} • ${batch.imported_by_name || 'Usuário'} • Aba ${batch.sheet_name || '—'}`,
-            ]),
-          ]),
-          el('div', { class: 'lead-import-history-counts' }, [
-            el('span', { class: 'category-badge' }, [`${currentCount} de ${originalCount} leads ativos`]),
-            Number(batch.duplicate_count) ? el('span', { class: 'category-badge muted' }, [`${batch.duplicate_count} duplicados`]) : null,
-            Number(batch.rejected_count) ? el('span', { class: 'category-badge user-inactive-badge' }, [`${batch.rejected_count} inválidos`]) : null,
-          ]),
-          deleteButton,
-        ]));
-      });
-    }
 
     function applyFilters() {
       const all = state.leads || [];
@@ -2202,19 +2268,6 @@
         listBody.appendChild(el('div', { class: 'dashboard-error' }, ['Não foi possível carregar os leads: ' + err.message]));
       });
 
-    api('/leads/imports')
-      .then(({ imports }) => {
-        state.leadImports = imports || [];
-        renderImportHistory();
-      })
-      .catch((err) => {
-        importHistoryBody.innerHTML = '';
-        importHistoryBody.appendChild(el('div', { class: 'dashboard-error' }, [
-          'Não foi possível carregar o histórico de importações: ' + err.message,
-        ]));
-      });
-
-    inner.appendChild(importHistoryCard);
     inner.appendChild(listCard);
     wrap.appendChild(inner);
     return wrap;

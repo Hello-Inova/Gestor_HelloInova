@@ -194,6 +194,8 @@ const SCHEMA_SQL = `
     ON activity_logs(account_id, actor_user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS activity_logs_account_type_idx
     ON activity_logs(account_id, action_type);
+  DELETE FROM activity_logs
+   WHERE actor_user_id IN (SELECT id FROM users WHERE role = 'admin');
 
   CREATE TABLE IF NOT EXISTS system_taxonomies (
     id SERIAL PRIMARY KEY,
@@ -218,6 +220,7 @@ const SCHEMA_SQL = `
     imported_by_email TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  ALTER TABLE lead_import_batches ADD COLUMN IF NOT EXISTS updated_count INTEGER NOT NULL DEFAULT 0;
   CREATE INDEX IF NOT EXISTS lead_import_batches_account_date_idx
     ON lead_import_batches(account_id, created_at DESC);
 

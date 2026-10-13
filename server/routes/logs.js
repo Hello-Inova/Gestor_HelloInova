@@ -7,11 +7,13 @@ const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const STORED_ACTIONS = ['Cadastro', 'Criação', 'Edição', 'Exclusão'];
+const FILTER_ACTIONS = ['Cadastro', 'Edição', 'Exclusão'];
 
 async function canAuditUser(accountId, userId) {
   return db.get(
     `SELECT 1 AS allowed
-       FROM users WHERE id = ? AND account_id = ?
+       FROM users WHERE id = ? AND account_id = ? AND role <> 'admin'
      UNION ALL
      SELECT 1 AS allowed
        FROM activity_logs WHERE actor_user_id = ? AND account_id = ?
@@ -31,9 +33,11 @@ router.get('/users', ah(async (req, res) => {
        FROM users u
        LEFT JOIN activity_logs l
          ON l.account_id = u.account_id AND l.actor_user_id = u.id
-      WHERE u.account_id = ?
+        AND l.action_type = ANY(?::text[])
+      WHERE u.account_id = ? AND u.role <> 'admin'
       GROUP BY u.id
       ORDER BY lower(u.name), u.id`,
+    STORED_ACTIONS,
     req.user.account_id
   );
   const deletedUsers = await db.all(
@@ -46,12 +50,15 @@ router.get('/users', ah(async (req, res) => {
                 AND login.action_type = 'Login') AS last_login_at,
             l.created_at AS last_action_at,
             (SELECT COUNT(*)::int FROM activity_logs c
-              WHERE c.account_id = l.account_id AND c.actor_user_id = l.actor_user_id) AS action_count
+              WHERE c.account_id = l.account_id AND c.actor_user_id = l.actor_user_id
+                AND c.action_type = ANY(?::text[])) AS action_count
        FROM activity_logs l
-      WHERE l.account_id = ?
+      WHERE l.account_id = ? AND l.action_type = ANY(?::text[])
         AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = l.actor_user_id)
       ORDER BY l.actor_user_id, l.created_at DESC`,
-    req.user.account_id
+    STORED_ACTIONS,
+    req.user.account_id,
+    STORED_ACTIONS
   );
   res.json({
     users: [...currentUsers, ...deletedUsers].map((user) => ({
@@ -67,15 +74,7 @@ router.get('/action-types', ah(async (req, res) => {
   if (!Number.isInteger(userId) || userId <= 0 || !(await canAuditUser(req.user.account_id, userId))) {
     return res.status(400).json({ error: 'Selecione um usuário válido.' });
   }
-  const rows = await db.all(
-    `SELECT DISTINCT action_type
-       FROM activity_logs
-      WHERE account_id = ? AND actor_user_id = ?
-      ORDER BY action_type`,
-    req.user.account_id,
-    userId
-  );
-  res.json({ action_types: rows.map((row) => row.action_type) });
+  res.json({ action_types: FILTER_ACTIONS });
 }));
 
 router.get('/', ah(async (req, res) => {
@@ -88,12 +87,17 @@ router.get('/', ah(async (req, res) => {
   const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 120) : '';
   const limit = Math.floor(Math.min(Math.max(Number(req.query.limit) || 100, 1), 250));
   const offset = Math.floor(Math.max(Number(req.query.offset) || 0, 0));
-  const conditions = ['account_id = ?', 'actor_user_id = ?'];
-  const params = [req.user.account_id, userId];
+  const conditions = ['account_id = ?', 'actor_user_id = ?', 'action_type = ANY(?::text[])'];
+  const params = [req.user.account_id, userId, STORED_ACTIONS];
 
   if (action) {
-    conditions.push('action_type ILIKE ?');
-    params.push(`%${action}%`);
+    if (!FILTER_ACTIONS.includes(action)) return res.status(400).json({ error: 'Tipo de ação inválido.' });
+    if (action === 'Cadastro') {
+      conditions.push("action_type IN ('Cadastro', 'Criação')");
+    } else {
+      conditions.push('action_type = ?');
+      params.push(action);
+    }
   }
   if (search) {
     conditions.push('(description ILIKE ? OR path ILIKE ? OR action_type ILIKE ?)');

@@ -1456,6 +1456,40 @@ button { font-family: inherit; }
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
+.dashboard-view-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(6, 11, 22, .78);
+}
+.dashboard-view-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 126px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font: 700 13px var(--font-display);
+  cursor: pointer;
+}
+.dashboard-view-tab:hover { color: var(--text-0); background: rgba(47,123,255,.07); }
+.dashboard-view-tab.active {
+  border-color: rgba(47,123,255,.42);
+  background: linear-gradient(135deg, rgba(15,75,216,.9), rgba(47,123,255,.9));
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(22,87,255,.2);
+}
+.dashboard-view-tab span { display: inline-flex; }
+.dashboard-panel { display: flex; flex-direction: column; gap: 20px; }
+.dashboard-panel-wrap { min-width: 0; }
 
 .dashboard-card {
   background: linear-gradient(180deg, var(--panel), var(--bg-1));
@@ -1551,6 +1585,8 @@ button { font-family: inherit; }
   .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
+  .dashboard-view-tabs { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-view-tab { min-width: 0; }
   .dashboard-cards { grid-template-columns: 1fr; }
   .dashboard-section-heading { align-items: flex-start; }
   .dashboard-sales-badge { display: none; }
@@ -2285,6 +2321,12 @@ button { font-family: inherit; }
 .lead-import-history-info span { color: var(--text-2); font-size: 10.5px; }
 .lead-import-history-counts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .lead-import-history-empty { padding: 18px 10px; }
+.lead-import-history-trigger { flex: 0 0 auto; }
+.lead-import-history-modal { display: flex; flex-direction: column; }
+.lead-import-history-modal .modal-header { flex: 0 0 auto; background: var(--panel); }
+.lead-import-history-modal .modal-header p { margin: 5px 0 0; }
+.lead-import-history-modal-body { min-height: 0; flex: 1; overflow: hidden; }
+.lead-import-history-modal-list { max-height: 100%; height: 100%; }
 
 @media (max-width: 560px) {
   .lead-import-picker { align-items: stretch; flex-direction: column; }
@@ -2298,6 +2340,8 @@ button { font-family: inherit; }
   .lead-import-history-counts,
   .lead-import-history-row > .btn { grid-column: 2; justify-content: flex-start; }
   .lead-import-history-row > .btn { width: 100%; justify-content: center; }
+  .lead-import-history-trigger span:last-child { display: none; }
+  .lead-import-history-trigger { width: 42px; padding-inline: 0; justify-content: center; }
 }
 
 /* ============================================================
@@ -2497,12 +2541,15 @@ button { font-family: inherit; }
 
   .sysmgr-card.grow .users-list {
     flex: 0 0 auto;
-    max-height: 534px;
+    max-height: min(660px, 68dvh);
     overflow-y: auto;
     padding-right: 5px;
   }
-  .users-list .sysmgr-row { height: 170px; scroll-snap-align: start; }
-  .users-list .sysmgr-row-main { height: 100%; }
+  .users-list .sysmgr-row { min-height: 210px; height: auto; scroll-snap-align: start; }
+  .users-list .sysmgr-row-main { min-height: 210px; height: auto; align-content: center; }
+  .users-list .sysmgr-row-info .r-name { white-space: normal; }
+  .users-list .user-row-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .users-list .user-row-actions .btn:first-child:last-child { grid-column: 1 / -1; }
 
   .public-sites-scroll .public-sites-mobile-scroll {
     flex: none;

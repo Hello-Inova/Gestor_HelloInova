@@ -23,35 +23,22 @@ function describeAction(req) {
   const path = String(req.originalUrl || req.path || '').split('?')[0].slice(0, 500);
   const resource = resourceFor(path);
 
-  if (path === '/api/auth/logout') return { actionType: 'Logout', description: 'Saiu do sistema', path };
-  if (/\/import(?:$|\/)/.test(path) && method === 'POST') {
-    return { actionType: 'Importação', description: `Importou ${resource}`, path };
-  }
-  if (/\/status$/.test(path) && method === 'PUT' && resource === 'usuários') {
-    const active = req.body && req.body.is_active;
-    return {
-      actionType: active ? 'Ativação' : 'Inativação',
-      description: active ? 'Ativou um usuário' : 'Inativou um usuário',
-      path,
-    };
-  }
-  if (method === 'GET') return { actionType: 'Visualização', description: `Visualizou ${resource}`, path };
-  if (method === 'POST') return { actionType: 'Criação', description: `Cadastrou dados em ${resource}`, path };
+  if (method === 'POST') return { actionType: 'Cadastro', description: `Cadastrou dados em ${resource}`, path };
   if (method === 'PUT' || method === 'PATCH') return { actionType: 'Edição', description: `Editou dados em ${resource}`, path };
   if (method === 'DELETE') return { actionType: 'Exclusão', description: `Excluiu dados em ${resource}`, path };
-  return { actionType: 'Ação', description: `Executou uma ação em ${resource}`, path };
+  return null;
 }
 
 function shouldAudit(req) {
   const path = String(req.originalUrl || req.path || '').split('?')[0];
   if (!path.startsWith('/api/')) return false;
   if (path.startsWith('/api/logs')) return false;
-  if (path === '/api/auth/me') return false;
-  return true;
+  if (path.startsWith('/api/auth/') && !path.startsWith('/api/auth/users')) return false;
+  return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(req.method || '').toUpperCase());
 }
 
 async function recordAudit({ user, actionType, description, method, path, statusCode = 200 }) {
-  if (!user || !user.id || !user.account_id) return;
+  if (!user || !user.id || !user.account_id || user.role === 'admin') return;
   await db.run(
     `INSERT INTO activity_logs
        (account_id, actor_user_id, actor_name, actor_email, action_type, description, method, path, status_code)
@@ -69,7 +56,7 @@ async function recordAudit({ user, actionType, description, method, path, status
 }
 
 function auditAuthenticatedResponse(req, res, user) {
-  if (!shouldAudit(req) || res.locals.auditWrapped) return;
+  if (!shouldAudit(req) || res.locals.auditWrapped || !user || user.role === 'admin') return;
   res.locals.auditWrapped = true;
   const originalEnd = res.end;
   let ended = false;
@@ -79,10 +66,11 @@ function auditAuthenticatedResponse(req, res, user) {
     res.end = originalEnd;
     const details = describeAction(req);
     const succeeded = res.statusCode >= 200 && res.statusCode < 400;
+    if (!details || !succeeded) return originalEnd.call(res, chunk, encoding, callback);
     return recordAudit({
       user,
       actionType: details.actionType,
-      description: succeeded ? details.description : `Tentativa não concluída: ${details.description.toLowerCase()}`,
+      description: details.description,
       method: req.method,
       path: details.path,
       statusCode: res.statusCode,
@@ -94,14 +82,6 @@ function auditAuthenticatedResponse(req, res, user) {
 
 async function recordLogin(user) {
   await db.run('UPDATE users SET last_login_at = NOW() WHERE id = ?', user.id);
-  await recordAudit({
-    user,
-    actionType: 'Login',
-    description: 'Entrou no sistema',
-    method: 'POST',
-    path: '/api/auth/verify-login',
-    statusCode: 200,
-  });
 }
 
 module.exports = { auditAuthenticatedResponse, recordAudit, recordLogin };

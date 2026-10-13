@@ -15,8 +15,8 @@ const {
   MAX_FILE_BYTES,
   LeadImportError,
   createLeadImportTemplateBuffer,
-  duplicateKey,
   parseLeadWorkbook,
+  partitionLeadImport,
   whatsappDigits,
 } = require('../lead-import');
 
@@ -216,39 +216,26 @@ router.post(
       await client.query('BEGIN');
       const emails = [...new Set(parsed.leads.map((lead) => lead.email))];
       const existingResult = emails.length
-        ? await client.query('SELECT email, whatsapp FROM leads WHERE lower(email) = ANY($1::text[])', [emails])
+        ? await client.query('SELECT id, email, whatsapp FROM leads WHERE lower(email) = ANY($1::text[])', [emails])
         : { rows: [] };
-      const existingKeys = new Set(existingResult.rows.map((lead) => duplicateKey(lead.email, lead.whatsapp)));
-      const fileKeys = new Set();
-      const uniqueLeads = [];
-      const duplicateErrors = [];
-
-      parsed.leads.forEach((lead) => {
-        const key = duplicateKey(lead.email, lead.whatsapp);
-        if (existingKeys.has(key) || fileKeys.has(key)) {
-          duplicateErrors.push({
-            row: lead.source_row,
-            email: lead.email,
-            message: 'Lead duplicado (mesmo e-mail e WhatsApp).',
-          });
-          return;
-        }
-        fileKeys.add(key);
-        uniqueLeads.push(lead);
-      });
+      const { leadsToInsert, leadsToUpdate, repeatedInFile } = partitionLeadImport(
+        parsed.leads,
+        existingResult.rows
+      );
 
       const batchResult = await client.query(
         `INSERT INTO lead_import_batches
-           (account_id, file_name, sheet_name, imported_count, duplicate_count, rejected_count,
-            total_rows, imported_by_user_id, imported_by_name, imported_by_email)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (account_id, file_name, sheet_name, imported_count, updated_count, duplicate_count,
+            rejected_count, total_rows, imported_by_user_id, imported_by_name, imported_by_email)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           req.user.account_id,
           fileName.trim().slice(0, 255),
           String(parsed.sheetName || '').slice(0, 200),
-          uniqueLeads.length,
-          duplicateErrors.length,
+          leadsToInsert.length,
+          leadsToUpdate.length,
+          repeatedInFile,
           parsed.errors.length,
           parsed.totalRows,
           req.user.id,
@@ -259,9 +246,9 @@ router.post(
       const importBatch = batchResult.rows[0];
 
       let importedRows = [];
-      if (uniqueLeads.length) {
+      if (leadsToInsert.length) {
         const params = [];
-        const valueGroups = uniqueLeads.map((lead, rowIndex) => {
+        const valueGroups = leadsToInsert.map((lead, rowIndex) => {
           const offset = rowIndex * 14;
           params.push(
             lead.name,
@@ -293,16 +280,69 @@ router.post(
         importedRows = inserted.rows;
       }
 
+      let updatedRows = [];
+      if (leadsToUpdate.length) {
+        const params = [];
+        const valueGroups = leadsToUpdate.map((lead, rowIndex) => {
+          const offset = rowIndex * 14;
+          params.push(
+            lead.id,
+            lead.name,
+            lead.whatsapp,
+            lead.email,
+            JSON.stringify(lead.services),
+            lead.business_segment,
+            lead.business_segment_other,
+            lead.description,
+            lead.instagram_url,
+            lead.responsible_name,
+            lead.responsible_contact,
+            lead.source,
+            lead.step_completed,
+            lead.status
+          );
+          const placeholders = Array.from({ length: 14 }, (_, index) => `$${offset + index + 1}`);
+          placeholders[0] += '::integer';
+          return `(${placeholders.join(', ')})`;
+        });
+        const updated = await client.query(
+          `UPDATE leads AS target SET
+             name = incoming.name,
+             whatsapp = incoming.whatsapp,
+             email = incoming.email,
+             services = incoming.services,
+             business_segment = incoming.business_segment,
+             business_segment_other = incoming.business_segment_other,
+             description = incoming.description,
+             instagram_url = incoming.instagram_url,
+             responsible_name = incoming.responsible_name,
+             responsible_contact = incoming.responsible_contact,
+             source = incoming.source,
+             step_completed = incoming.step_completed,
+             status = incoming.status,
+             updated_at = NOW()
+           FROM (VALUES ${valueGroups.join(', ')}) AS incoming
+             (id, name, whatsapp, email, services, business_segment, business_segment_other,
+              description, instagram_url, responsible_name, responsible_contact, source,
+              step_completed, status)
+           WHERE target.id = incoming.id
+           RETURNING target.*`,
+          params
+        );
+        updatedRows = updated.rows;
+      }
+
       await client.query('COMMIT');
       res.status(201).json({
         imported_count: importedRows.length,
-        duplicate_count: duplicateErrors.length,
+        updated_count: updatedRows.length,
+        duplicate_count: repeatedInFile,
         rejected_count: parsed.errors.length,
         total_rows: parsed.totalRows,
         sheet_name: parsed.sheetName,
         import_batch: importBatch,
-        errors: [...parsed.errors, ...duplicateErrors].slice(0, 50),
-        leads: importedRows.map(serializeLead),
+        errors: parsed.errors.slice(0, 50),
+        leads: [...updatedRows, ...importedRows].map(serializeLead),
       });
     } catch (err) {
       await client.query('ROLLBACK');

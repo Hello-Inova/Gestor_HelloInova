@@ -70,6 +70,27 @@ function duplicateKey(email, whatsapp) {
   return `${cleanText(email, 320).toLowerCase()}|${whatsappDigits(whatsapp)}`;
 }
 
+function partitionLeadImport(leads, existingLeads) {
+  const existingByKey = new Map((existingLeads || []).map((lead) => [
+    duplicateKey(lead.email, lead.whatsapp), lead,
+  ]));
+  const leadsByKey = new Map();
+  let repeatedInFile = 0;
+  (leads || []).forEach((lead) => {
+    const key = duplicateKey(lead.email, lead.whatsapp);
+    if (leadsByKey.has(key)) repeatedInFile += 1;
+    leadsByKey.set(key, lead);
+  });
+  const leadsToInsert = [];
+  const leadsToUpdate = [];
+  leadsByKey.forEach((lead, key) => {
+    const existing = existingByKey.get(key);
+    if (existing) leadsToUpdate.push({ ...lead, id: existing.id });
+    else leadsToInsert.push(lead);
+  });
+  return { leadsToInsert, leadsToUpdate, repeatedInFile };
+}
+
 function normalizeStatus(value) {
   const normalized = comparableText(value).replace(/\s+/g, '_');
   const aliases = {
@@ -252,6 +273,7 @@ module.exports = {
   LeadImportError,
   createLeadImportTemplateBuffer,
   duplicateKey,
+  partitionLeadImport,
   normalizeLeadRow,
   parseLeadWorkbook,
   whatsappDigits,

@@ -6,6 +6,7 @@ const {
   LeadImportError,
   createLeadImportTemplateBuffer,
   duplicateKey,
+  partitionLeadImport,
   parseLeadWorkbook,
 } = require('../server/lead-import');
 
@@ -82,4 +83,19 @@ test('chave de duplicidade normaliza e-mail e telefone', () => {
     duplicateKey(' Pessoa@Exemplo.com ', '(11) 9 9999-0000'),
     'pessoa@exemplo.com|11999990000'
   );
+});
+
+test('importação separa novos leads e atualiza duplicados com a última linha da planilha', () => {
+  const existing = [{ id: 7, email: 'cliente@exemplo.com', whatsapp: '(11) 99999-0000' }];
+  const leads = [
+    { name: 'Antigo na planilha', email: 'cliente@exemplo.com', whatsapp: '11999990000' },
+    { name: 'Novo', email: 'novo@exemplo.com', whatsapp: '11988887777' },
+    { name: 'Atualizado pela última linha', email: 'CLIENTE@EXEMPLO.COM', whatsapp: '(11) 99999-0000' },
+  ];
+  const result = partitionLeadImport(leads, existing);
+  assert.equal(result.leadsToInsert.length, 1);
+  assert.equal(result.leadsToUpdate.length, 1);
+  assert.equal(result.leadsToUpdate[0].id, 7);
+  assert.equal(result.leadsToUpdate[0].name, 'Atualizado pela última linha');
+  assert.equal(result.repeatedInFile, 1);
 });
