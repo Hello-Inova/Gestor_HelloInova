@@ -4,6 +4,7 @@ const XLSX = require('xlsx');
 
 const {
   LeadImportError,
+  buildLeadUpdateValueGroup,
   createLeadImportTemplateBuffer,
   duplicateKey,
   partitionLeadImport,
@@ -98,4 +99,15 @@ test('importação separa novos leads e atualiza duplicados com a última linha 
   assert.equal(result.leadsToUpdate[0].id, 7);
   assert.equal(result.leadsToUpdate[0].name, 'Atualizado pela última linha');
   assert.equal(result.repeatedInFile, 1);
+});
+
+test('atualização em massa tipa os campos inteiros para o PostgreSQL', () => {
+  assert.equal(
+    buildLeadUpdateValueGroup(0),
+    '($1::integer, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::integer, $14)'
+  );
+  assert.equal(
+    buildLeadUpdateValueGroup(1),
+    '($15::integer, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27::integer, $28)'
+  );
 });

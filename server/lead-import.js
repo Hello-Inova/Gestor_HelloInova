@@ -91,6 +91,14 @@ function partitionLeadImport(leads, existingLeads) {
   return { leadsToInsert, leadsToUpdate, repeatedInFile };
 }
 
+function buildLeadUpdateValueGroup(rowIndex) {
+  const offset = rowIndex * 14;
+  return `(${Array.from({ length: 14 }, (_, index) => {
+    const placeholder = `$${offset + index + 1}`;
+    return index === 0 || index === 12 ? `${placeholder}::integer` : placeholder;
+  }).join(', ')})`;
+}
+
 function normalizeStatus(value) {
   const normalized = comparableText(value).replace(/\s+/g, '_');
   const aliases = {
@@ -272,6 +280,7 @@ module.exports = {
   MAX_IMPORT_ROWS,
   LeadImportError,
   createLeadImportTemplateBuffer,
+  buildLeadUpdateValueGroup,
   duplicateKey,
   partitionLeadImport,
   normalizeLeadRow,

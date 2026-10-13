@@ -14,6 +14,7 @@ const { requireAnyModule } = require('../permissions');
 const {
   MAX_FILE_BYTES,
   LeadImportError,
+  buildLeadUpdateValueGroup,
   createLeadImportTemplateBuffer,
   parseLeadWorkbook,
   partitionLeadImport,
@@ -284,7 +285,6 @@ router.post(
       if (leadsToUpdate.length) {
         const params = [];
         const valueGroups = leadsToUpdate.map((lead, rowIndex) => {
-          const offset = rowIndex * 14;
           params.push(
             lead.id,
             lead.name,
@@ -301,9 +301,7 @@ router.post(
             lead.step_completed,
             lead.status
           );
-          const placeholders = Array.from({ length: 14 }, (_, index) => `$${offset + index + 1}`);
-          placeholders[0] += '::integer';
-          return `(${placeholders.join(', ')})`;
+          return buildLeadUpdateValueGroup(rowIndex);
         });
         const updated = await client.query(
           `UPDATE leads AS target SET
