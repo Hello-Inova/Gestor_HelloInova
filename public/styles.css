@@ -2198,7 +2198,7 @@ button { font-family: inherit; }
   .product-catalog-scroll .sysmgr,
   .product-catalog-scroll .sysmgr-card.grow { height: auto; overflow: visible; }
   .product-manager-grid { flex: none; min-height: 0; overflow-y: auto; padding-right: 5px; }
-  .product-manager-card { grid-template-columns: 58px minmax(0, 1fr); gap: 12px; min-height: 190px; height: 190px; padding: 13px; }
+  .product-manager-card { grid-template-columns: 58px minmax(0, 1fr); gap: 12px; min-height: 270px; height: 270px; padding: 13px; }
   .product-manager-image { width: 56px; height: 56px; border-radius: 12px; }
   .product-manager-content h3 { font-size: 15px; }
   .product-manager-content p { font-size: 12px; }
@@ -2577,11 +2577,17 @@ button { font-family: inherit; }
 
   .product-catalog-scroll .product-single-scroll {
     flex: none;
-    max-height: min(392px, 64dvh);
+    /* Dois cards completos (2 x 270px) mais o espaço de 12px entre eles. */
+    max-height: 552px;
     overflow-y: auto;
     padding-right: 5px;
   }
-  .product-single-scroll .product-manager-card { height: 190px; min-height: 190px; scroll-snap-align: start; }
+  .product-single-scroll .product-manager-card {
+    flex: 0 0 270px;
+    height: 270px;
+    min-height: 270px;
+    scroll-snap-align: start;
+  }
 
   .candidate-single-scroll {
     max-height: 328px;
