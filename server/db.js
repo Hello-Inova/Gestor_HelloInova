@@ -78,12 +78,14 @@ const SCHEMA_SQL = `
     role TEXT NOT NULL DEFAULT 'admin',
     module_permissions TEXT NOT NULL DEFAULT '[]',
     is_active INTEGER NOT NULL DEFAULT 1,
+    last_login_at TIMESTAMPTZ,
     systems_seeded INTEGER NOT NULL DEFAULT 0,
     dashboard_seeded INTEGER NOT NULL DEFAULT 0,
     leads_seeded INTEGER NOT NULL DEFAULT 0,
     candidates_seeded INTEGER NOT NULL DEFAULT 0,
     public_sites_seeded INTEGER NOT NULL DEFAULT 0,
     catalog_seeded INTEGER NOT NULL DEFAULT 0,
+    logs_seeded INTEGER NOT NULL DEFAULT 0,
     public_slug TEXT,
     email_verified INTEGER NOT NULL DEFAULT 0,
     account_id INTEGER,
@@ -165,6 +167,8 @@ const SCHEMA_SQL = `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS module_permissions TEXT NOT NULL DEFAULT '[]';
   ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS logs_seeded INTEGER NOT NULL DEFAULT 0;
   UPDATE pages
      SET name = 'Controle de Usuários'
    WHERE type = 'users' AND name <> 'Controle de Usuários';
@@ -172,6 +176,24 @@ const SCHEMA_SQL = `
      SET public_slug = md5(random()::text || clock_timestamp()::text || id::text)
    WHERE public_slug IS NULL OR public_slug = '';
   CREATE UNIQUE INDEX IF NOT EXISTS users_public_slug_unique ON users(public_slug);
+
+  CREATE TABLE IF NOT EXISTS activity_logs (
+    id BIGSERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_user_id INTEGER NOT NULL,
+    actor_name TEXT NOT NULL,
+    actor_email TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status_code INTEGER NOT NULL DEFAULT 200,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS activity_logs_account_user_date_idx
+    ON activity_logs(account_id, actor_user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS activity_logs_account_type_idx
+    ON activity_logs(account_id, action_type);
 
   CREATE TABLE IF NOT EXISTS system_taxonomies (
     id SERIAL PRIMARY KEY,

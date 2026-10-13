@@ -139,6 +139,30 @@ async function ensureCatalogModule(accountId) {
   await db.run('UPDATE users SET catalog_seeded = 1 WHERE id = ?', accountId);
 }
 
+// O módulo de auditoria é administrativo e deve aparecer também para
+// contas criadas antes da introdução dos logs.
+async function ensureLogsModule(accountId) {
+  const user = await db.get('SELECT logs_seeded FROM users WHERE id = ?', accountId);
+  if (!user || user.logs_seeded) return;
+
+  const existing = await db.get(
+    "SELECT id FROM pages WHERE user_id = ? AND type = 'logs'",
+    accountId
+  );
+  if (!existing) {
+    const maxOrderRow = await db.get(
+      'SELECT COALESCE(MAX(order_index), -1) as m FROM pages WHERE user_id = ?',
+      accountId
+    );
+    await db.run(
+      "INSERT INTO pages (user_id, name, type, order_index) VALUES (?, 'Logs de Auditoria', 'logs', ?)",
+      accountId,
+      Number(maxOrderRow.m) + 1
+    );
+  }
+  await db.run('UPDATE users SET logs_seeded = 1 WHERE id = ?', accountId);
+}
+
 // Lista módulos da conta, com seus elementos
 router.get(
   '/',
@@ -148,6 +172,7 @@ router.get(
     await ensureCandidatesModule(req.user.account_id);
     await ensurePublicSitesModule(req.user.account_id);
     await ensureCatalogModule(req.user.account_id);
+    await ensureLogsModule(req.user.account_id);
 
     const pages = await db.all(
       'SELECT * FROM pages WHERE user_id = ? ORDER BY order_index ASC, id ASC',
@@ -156,14 +181,14 @@ router.get(
 
     const visiblePages = pages.filter((page) => {
       if (normalizeRole(req.user.role) === 'admin') return true;
-      if (page.type === 'users' || page.type === 'canvas') return false;
+      if (page.type === 'users' || page.type === 'logs' || page.type === 'canvas') return false;
       return hasModuleAccess(req.user, page.type);
     });
 
     const result = await Promise.all(
       visiblePages.map(async (p) => ({
         ...p,
-        elements: ['systems', 'dashboard', 'users', 'leads', 'candidates', 'public_sites', 'catalog'].includes(p.type)
+        elements: ['systems', 'dashboard', 'users', 'leads', 'candidates', 'public_sites', 'catalog', 'logs'].includes(p.type)
           ? []
           : await db.all('SELECT * FROM elements WHERE page_id = ? ORDER BY z_index ASC, id ASC', p.id),
       }))

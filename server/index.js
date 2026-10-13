@@ -16,6 +16,7 @@ const candidateRoutes = require('./routes/candidates');
 const publicSiteRoutes = require('./routes/public-sites');
 const productRoutes = require('./routes/products');
 const publicCatalogRoutes = require('./routes/public-catalog');
+const logRoutes = require('./routes/logs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +55,7 @@ app.use('/api/candidates', express.json({ limit: '64kb' }), candidateRoutes);
 app.use('/api/public-sites', express.json({ limit: '64kb' }), publicSiteRoutes);
 app.use('/api/products', express.json({ limit: '5mb' }), productRoutes);
 app.use('/api/public-catalog', express.json({ limit: '64kb' }), publicCatalogRoutes);
+app.use('/api/logs', express.json({ limit: '64kb' }), logRoutes);
 
 // Frontend estático — precisa estar em public/** na raiz do projeto (a
 // Vercel serve esse diretório direto pela CDN e ignora express.static() nas

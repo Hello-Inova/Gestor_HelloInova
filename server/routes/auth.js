@@ -12,6 +12,7 @@ const {
 } = require('../auth');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../email');
 const { validatePassword } = require('../security');
+const { recordLogin } = require('../audit');
 const {
   MODULE_CATALOG,
   VALID_ROLES,
@@ -171,6 +172,7 @@ function publicUser(row) {
     name: row.name,
     email: row.email,
     created_at: row.created_at,
+    last_login_at: row.last_login_at || null,
     is_active: row.is_active !== 0 && row.is_active !== false,
     is_owner: Number(row.id) === Number(row.account_id),
     ...serializeUserAccess(row),
@@ -278,7 +280,14 @@ router.post(
       6
     );
     await db.run(
-      'UPDATE users SET systems_seeded = 1, dashboard_seeded = 1, leads_seeded = 1, candidates_seeded = 1, public_sites_seeded = 1, catalog_seeded = 1 WHERE id = ?',
+      'INSERT INTO pages (user_id, name, type, order_index) VALUES (?, ?, ?, ?)',
+      userId,
+      'Logs de Auditoria',
+      'logs',
+      7
+    );
+    await db.run(
+      'UPDATE users SET systems_seeded = 1, dashboard_seeded = 1, leads_seeded = 1, candidates_seeded = 1, public_sites_seeded = 1, catalog_seeded = 1, logs_seeded = 1 WHERE id = ?',
       userId
     );
 
@@ -306,6 +315,7 @@ router.post(
 
     await db.run('UPDATE users SET email_verified = 1 WHERE id = ?', row.id);
     const user = loginUser(res, row);
+    await recordLogin(row);
     res.json({ user });
   })
 );
@@ -372,6 +382,7 @@ router.post(
     if (!row.is_active) return res.status(403).json({ error: 'Este usuário está inativo. Procure um administrador.' });
 
     const user = loginUser(res, row);
+    await recordLogin(row);
     res.json({ user });
   })
 );
@@ -501,7 +512,7 @@ router.post(
 );
 
 // ---------------- Logout ----------------
-router.post('/logout', (req, res) => {
+router.post('/logout', requireAuth, (req, res) => {
   clearAuthCookie(res);
   res.json({ ok: true });
 });
@@ -512,7 +523,7 @@ router.get(
   requireAuth,
   ah(async (req, res) => {
     const row = await db.get(
-      'SELECT id, name, email, account_id, role, module_permissions, is_active, created_at FROM users WHERE id = ?',
+      'SELECT id, name, email, account_id, role, module_permissions, is_active, last_login_at, created_at FROM users WHERE id = ?',
       req.user.id
     );
     if (!row) return res.status(401).json({ error: 'Não autenticado.' });
@@ -569,7 +580,7 @@ router.put(
     setAuthCookie(res, token);
 
     const updated = await db.get(
-      'SELECT id, name, email, account_id, role, module_permissions, is_active, created_at FROM users WHERE id = ?',
+      'SELECT id, name, email, account_id, role, module_permissions, is_active, last_login_at, created_at FROM users WHERE id = ?',
       current.id
     );
     res.json({ user: publicUser(updated) });
@@ -589,7 +600,7 @@ router.get(
   requireAdmin,
   ah(async (req, res) => {
     const rows = await db.all(
-      'SELECT id, name, email, account_id, role, module_permissions, is_active, created_at FROM users WHERE account_id = ? ORDER BY id ASC',
+      'SELECT id, name, email, account_id, role, module_permissions, is_active, last_login_at, created_at FROM users WHERE account_id = ? ORDER BY id ASC',
       req.user.account_id
     );
     res.json({ users: rows.map(publicUser), modules: MODULE_CATALOG });

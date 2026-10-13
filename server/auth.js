@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 const { parseModulePermissions } = require('./permissions');
+const { auditAuthenticatedResponse } = require('./audit');
 
 const configuredSecret = process.env.JWT_SECRET;
 if (process.env.NODE_ENV === 'production' && (!configuredSecret || configuredSecret.length < 32)) {
@@ -71,6 +72,7 @@ async function requireAuth(req, res, next) {
     }
     activeUser.module_permissions = parseModulePermissions(activeUser.module_permissions);
     req.user = activeUser;
+    auditAuthenticatedResponse(req, res, activeUser);
     // Renova a sessão (janela deslizante) a cada requisição autenticada.
     const fresh = signToken(activeUser);
     setAuthCookie(res, fresh);

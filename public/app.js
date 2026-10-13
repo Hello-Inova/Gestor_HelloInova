@@ -35,6 +35,9 @@
     leadsSearch: '',
     leadsFilterStatus: [],
     leadsBusinessSegment: '',
+    logsSelectedUserId: null,
+    logsActionFilter: '',
+    logsSearch: '',
     leadModal: null, // lead sendo visualizado no pop-up de detalhes
     leadImportModal: null, // arquivo/resultado da importação em massa
     candidates: null, // candidaturas recebidas pelo formulário público de SDR
@@ -253,6 +256,13 @@
     const parts = String(iso).slice(0, 10).split('-');
     if (parts.length !== 3) return iso;
     return parts[2] + '/' + parts[1] + '/' + parts[0];
+  }
+
+  function formatDateTimeBR(iso) {
+    if (!iso) return 'Ainda não registrado';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return String(iso);
+    return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   }
 
   function normalizedUrl(url) {
@@ -1122,7 +1132,8 @@
     const isCandidates = page && page.type === 'candidates';
     const isPublicSites = page && page.type === 'public_sites';
     const isCatalog = page && page.type === 'catalog';
-    const isSpecial = isSystems || isDashboard || isUsers || isLeads || isCandidates || isPublicSites || isCatalog;
+    const isLogs = page && page.type === 'logs';
+    const isSpecial = isSystems || isDashboard || isUsers || isLeads || isCandidates || isPublicSites || isCatalog || isLogs;
 
     let headerTools = null;
     if (isSystems) {
@@ -1229,6 +1240,11 @@
 
     if (isCatalog) {
       main.appendChild(buildProductCatalogManager());
+      return main;
+    }
+
+    if (isLogs) {
+      main.appendChild(buildAuditLogsManager());
       return main;
     }
 
@@ -1604,6 +1620,207 @@
       class: 'modal-overlay',
       onclick: (event) => { if (event.target === event.currentTarget) closeUserModal(); },
     }, [card]);
+  }
+
+  // ---------------- Logs de Auditoria (somente administradores) ----------------
+  function buildAuditLogsManager() {
+    const wrap = el('div', { class: 'canvas-scroll audit-scroll' });
+    const inner = el('div', { class: 'audit-manager' });
+    const userSelect = el('select', { class: 'audit-filter-control', 'aria-label': 'Selecionar usuário' }, [
+      el('option', { value: '' }, ['Carregando usuários…']),
+    ]);
+    const actionListId = 'audit-action-type-suggestions';
+    const actionInput = el('input', {
+      type: 'search', class: 'audit-filter-control', list: actionListId,
+      placeholder: 'Digite o tipo de ação…', value: state.logsActionFilter || '',
+      autocomplete: 'off',
+    });
+    const actionOptions = el('datalist', { id: actionListId });
+    const searchInput = el('input', {
+      type: 'search', class: 'audit-filter-control',
+      placeholder: 'Pesquisar na descrição ou rota…', value: state.logsSearch || '',
+    });
+    const summary = el('div', { class: 'audit-summary' });
+    const resultsMeta = el('div', { class: 'audit-results-meta' }, ['Selecione um usuário para auditar.']);
+    const list = el('div', { class: 'audit-log-list' });
+    const loadMore = el('button', { class: 'btn btn-ghost audit-load-more', type: 'button' }, ['Carregar mais ações']);
+    loadMore.style.display = 'none';
+
+    const filterCard = el('div', { class: 'sysmgr-card audit-filter-card' }, [
+      el('div', { class: 'sysmgr-header-row' }, [
+        el('div', { class: 'htext' }, [
+          el('h3', {}, [el('span', { html: icon('shield') }), ' Auditoria de usuários']),
+          el('p', { class: 'sysmgr-sub' }, ['Selecione uma pessoa e filtre as ações executadas no sistema.']),
+        ]),
+      ]),
+      el('div', { class: 'audit-filters' }, [
+        el('label', { class: 'audit-filter-field' }, [el('span', {}, ['Usuário']), userSelect]),
+        el('label', { class: 'audit-filter-field' }, [el('span', {}, ['Tipo de ação']), actionInput, actionOptions]),
+        el('label', { class: 'audit-filter-field' }, [el('span', {}, ['Pesquisa']), searchInput]),
+      ]),
+    ]);
+    const historyCard = el('div', { class: 'sysmgr-card grow audit-history-card' }, [
+      el('div', { class: 'audit-history-heading' }, [
+        el('h3', {}, [el('span', { html: icon('layers') }), ' Histórico de ações']),
+        resultsMeta,
+      ]),
+      list,
+      loadMore,
+    ]);
+
+    let users = [];
+    let offset = 0;
+    let total = 0;
+    let loading = false;
+    let filterTimer = null;
+    const pageSize = 100;
+
+    function selectedUser() {
+      return users.find((user) => Number(user.id) === Number(userSelect.value));
+    }
+
+    function renderUserSummary() {
+      const user = selectedUser();
+      summary.innerHTML = '';
+      if (!user) return;
+      summary.appendChild(el('div', { class: 'audit-person-card' }, [
+        el('div', { class: 'audit-person-avatar' }, [(user.name || '?').trim().charAt(0).toUpperCase()]),
+        el('div', { class: 'audit-person-info' }, [
+          el('strong', {}, [user.name || 'Usuário']),
+          el('span', {}, [user.email || '']),
+          user.is_deleted ? el('span', { class: 'category-badge user-inactive-badge' }, ['Usuário excluído']) : null,
+        ]),
+      ]));
+      summary.appendChild(auditSummaryCard('Login', 'Data do último login', formatDateTimeBR(user.last_login_at)));
+      summary.appendChild(auditSummaryCard('Ação', 'Última ação no sistema', formatDateTimeBR(user.last_action_at)));
+      summary.appendChild(auditSummaryCard('Total', 'Ações registradas', String(user.action_count || 0)));
+    }
+
+    function auditSummaryCard(kicker, label, value) {
+      return el('div', { class: 'audit-summary-card' }, [
+        el('span', { class: 'audit-summary-kicker' }, [kicker]),
+        el('strong', {}, [value]),
+        el('small', {}, [label]),
+      ]);
+    }
+
+    function renderLogRow(log) {
+      const failed = Number(log.status_code) >= 400;
+      return el('div', { class: 'audit-log-row' + (failed ? ' failed' : '') }, [
+        el('div', { class: 'audit-log-marker', html: icon(failed ? 'info' : 'shield') }),
+        el('div', { class: 'audit-log-content' }, [
+          el('div', { class: 'audit-log-title' }, [
+            el('span', { class: 'category-badge audit-action-badge' }, [log.action_type]),
+            el('strong', {}, [log.description]),
+          ]),
+          el('div', { class: 'audit-log-route' }, [log.method + ' ' + log.path]),
+        ]),
+        el('div', { class: 'audit-log-time' }, [
+          el('strong', {}, [formatDateTimeBR(log.created_at)]),
+          el('span', {}, ['Status ' + log.status_code]),
+        ]),
+      ]);
+    }
+
+    async function loadActionTypes() {
+      actionOptions.innerHTML = '';
+      if (!userSelect.value) return;
+      try {
+        const data = await api('/logs/action-types?user_id=' + encodeURIComponent(userSelect.value));
+        (data.action_types || []).forEach((type) => actionOptions.appendChild(el('option', { value: type })));
+      } catch (err) { toast(err.message, true); }
+    }
+
+    async function loadLogs(reset) {
+      if (loading || !userSelect.value) return;
+      loading = true;
+      if (reset) {
+        offset = 0;
+        total = 0;
+        list.innerHTML = '';
+        list.appendChild(el('div', { class: 'dashboard-loading' }, ['Carregando ações…']));
+      }
+      loadMore.disabled = true;
+      const params = new URLSearchParams({
+        user_id: userSelect.value,
+        action: state.logsActionFilter || '',
+        search: state.logsSearch || '',
+        limit: String(pageSize),
+        offset: String(offset),
+      });
+      try {
+        const data = await api('/logs?' + params.toString());
+        if (reset) list.innerHTML = '';
+        const logs = data.logs || [];
+        logs.forEach((log) => list.appendChild(renderLogRow(log)));
+        total = Number(data.total) || 0;
+        offset += logs.length;
+        resultsMeta.textContent = total === 1 ? '1 ação encontrada' : total + ' ações encontradas';
+        if (!offset) list.appendChild(el('div', { class: 'sysmgr-empty' }, ['Nenhuma ação encontrada com os filtros atuais.']));
+        loadMore.style.display = offset < total ? 'inline-flex' : 'none';
+      } catch (err) {
+        if (reset) list.innerHTML = '';
+        list.appendChild(el('div', { class: 'dashboard-error' }, ['Não foi possível carregar os logs: ' + err.message]));
+      } finally {
+        loading = false;
+        loadMore.disabled = false;
+      }
+    }
+
+    function scheduleFilter() {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(() => loadLogs(true), 260);
+    }
+
+    userSelect.addEventListener('change', async () => {
+      state.logsSelectedUserId = Number(userSelect.value) || null;
+      state.logsActionFilter = '';
+      actionInput.value = '';
+      renderUserSummary();
+      await loadActionTypes();
+      loadLogs(true);
+    });
+    actionInput.addEventListener('input', () => {
+      state.logsActionFilter = actionInput.value.trim();
+      scheduleFilter();
+    });
+    searchInput.addEventListener('input', () => {
+      state.logsSearch = searchInput.value.trim();
+      scheduleFilter();
+    });
+    loadMore.addEventListener('click', () => loadLogs(false));
+
+    list.appendChild(el('div', { class: 'dashboard-loading' }, ['Carregando usuários…']));
+    api('/logs/users').then(async (data) => {
+      users = data.users || [];
+      userSelect.innerHTML = '';
+      if (!users.length) {
+        userSelect.appendChild(el('option', { value: '' }, ['Nenhum usuário encontrado']));
+        list.innerHTML = '';
+        list.appendChild(el('div', { class: 'sysmgr-empty' }, ['Nenhum usuário disponível para auditoria.']));
+        return;
+      }
+      users.forEach((user) => userSelect.appendChild(el('option', { value: user.id }, [
+        user.name + (user.is_deleted ? ' (excluído)' : ''),
+      ])));
+      const preferred = users.some((user) => Number(user.id) === Number(state.logsSelectedUserId))
+        ? state.logsSelectedUserId
+        : (users.find((user) => Number(user.id) === Number(state.user.id)) || users[0]).id;
+      userSelect.value = String(preferred);
+      state.logsSelectedUserId = Number(preferred);
+      renderUserSummary();
+      await loadActionTypes();
+      loadLogs(true);
+    }).catch((err) => {
+      list.innerHTML = '';
+      list.appendChild(el('div', { class: 'dashboard-error' }, ['Não foi possível carregar os usuários: ' + err.message]));
+    });
+
+    inner.appendChild(filterCard);
+    inner.appendChild(summary);
+    inner.appendChild(historyCard);
+    wrap.appendChild(inner);
+    return wrap;
   }
 
   // ---------------- Leads (módulo especial) ----------------
