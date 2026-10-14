@@ -251,8 +251,10 @@ const SCHEMA_SQL = `
   ALTER TABLE leads ADD COLUMN IF NOT EXISTS responsible_name TEXT DEFAULT '';
   ALTER TABLE leads ADD COLUMN IF NOT EXISTS responsible_contact TEXT DEFAULT '';
   ALTER TABLE leads ADD COLUMN IF NOT EXISTS import_batch_id BIGINT REFERENCES lead_import_batches(id) ON DELETE CASCADE;
+  ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_seller_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
   CREATE INDEX IF NOT EXISTS leads_public_token_hash_idx ON leads(public_token_hash);
   CREATE INDEX IF NOT EXISTS leads_import_batch_idx ON leads(import_batch_id);
+  CREATE INDEX IF NOT EXISTS leads_assigned_seller_idx ON leads(assigned_seller_id);
 
   CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,

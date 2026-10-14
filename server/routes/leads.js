@@ -167,8 +167,20 @@ router.get(
   requireAuth,
   requireAnyModule('leads'),
   ah(async (req, res) => {
-    const rows = await db.all('SELECT * FROM leads ORDER BY created_at DESC');
-    res.json({ leads: rows.map(serializeLead) });
+    const [rows, sellers] = await Promise.all([
+      db.all('SELECT * FROM leads ORDER BY created_at DESC'),
+      db.all(
+        `SELECT id, name, email, is_active
+           FROM users
+          WHERE account_id = ? AND role = 'vendas'
+          ORDER BY is_active DESC, name ASC, id ASC`,
+        req.user.account_id
+      ),
+    ]);
+    res.json({
+      leads: rows.map(serializeLead),
+      sellers: sellers.map((seller) => ({ ...seller, is_active: !!seller.is_active })),
+    });
   })
 );
 
@@ -437,12 +449,37 @@ router.put(
     const responsibleContact = typeof body.responsible_contact === 'string'
       ? body.responsible_contact.trim().slice(0, 200)
       : current.responsible_contact;
+    let assignedSellerId = current.assigned_seller_id === null || current.assigned_seller_id === undefined
+      ? null
+      : Number(current.assigned_seller_id);
+    if (Object.prototype.hasOwnProperty.call(body, 'assigned_seller_id')) {
+      if (body.assigned_seller_id === null || body.assigned_seller_id === '') {
+        assignedSellerId = null;
+      } else {
+        const requestedSellerId = Number(body.assigned_seller_id);
+        if (!Number.isSafeInteger(requestedSellerId) || requestedSellerId <= 0) {
+          return res.status(400).json({ error: 'Selecione um vendedor válido.' });
+        }
+        const seller = await db.get(
+          `SELECT id, is_active
+             FROM users
+            WHERE id = ? AND account_id = ? AND role = 'vendas'`,
+          requestedSellerId,
+          req.user.account_id
+        );
+        if (!seller) return res.status(400).json({ error: 'Vendedor não encontrado nesta conta.' });
+        if (!seller.is_active && requestedSellerId !== Number(current.assigned_seller_id)) {
+          return res.status(400).json({ error: 'Não é possível vincular um vendedor inativo.' });
+        }
+        assignedSellerId = requestedSellerId;
+      }
+    }
 
     const updated = await db.run(
       `UPDATE leads SET
          name = ?, whatsapp = ?, email = ?, services = ?, business_segment = ?,
          description = ?, instagram_url = ?, responsible_name = ?, responsible_contact = ?,
-         status = ?, updated_at = NOW()
+         status = ?, assigned_seller_id = ?, updated_at = NOW()
        WHERE id = ? RETURNING *`,
       name,
       whatsapp,
@@ -454,6 +491,7 @@ router.put(
       responsibleName,
       responsibleContact,
       status,
+      assignedSellerId,
       lead.id
     );
     res.json({ lead: serializeLead(updated.rows[0]) });

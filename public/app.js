@@ -33,6 +33,7 @@
     forgotPasswordOpen: false, // pop-up "esqueci minha senha" (pede o e-mail)
     resetToken: null, // token vindo do link do e-mail de recuperação de senha
     leads: null, // lista de leads captados (módulo "Leads")
+    leadSellers: [], // usuários de Vendas disponíveis para assumir tratativas
     leadsSearch: '',
     leadsFilterStatus: [],
     leadsBusinessSegment: '',
@@ -2222,7 +2223,8 @@
       return all.filter((lead) => {
         if (term) {
           const hay = [lead.name, lead.whatsapp, lead.email, lead.business_segment,
-            lead.instagram_url, lead.responsible_name, lead.responsible_contact]
+            lead.instagram_url, lead.responsible_name, lead.responsible_contact,
+            (leadAssignedSeller(lead) || {}).name]
             .filter(Boolean).join(' ').toLowerCase();
           if (!hay.includes(term)) return false;
         }
@@ -2251,8 +2253,9 @@
     }
 
     api('/leads')
-      .then(({ leads }) => {
+      .then(({ leads, sellers }) => {
         state.leads = leads;
+        state.leadSellers = Array.isArray(sellers) ? sellers : [];
         const segments = [...new Set(leads.map((lead) => (
           lead.business_segment === 'Outros' && lead.business_segment_other
             ? lead.business_segment_other
@@ -2289,6 +2292,10 @@
     const step2Badge = lead.step_completed >= 2
       ? null
       : el('span', { class: 'category-badge muted' }, ['Só etapa 1']);
+    const seller = leadAssignedSeller(lead);
+    const sellerBadge = seller
+      ? el('span', { class: 'category-badge muted' }, ['Vendedor: ' + seller.name])
+      : null;
 
     const viewBtn = el('button', {
       class: 'btn btn-primary btn-sm', title: 'Visualizar lead', type: 'button',
@@ -2300,7 +2307,7 @@
       el('div', { class: 'sysmgr-row-info' }, [
         el('div', { class: 'r-name' }, [lead.name]),
         el('a', { class: 'r-url', href: '#', onclick: (ev) => ev.preventDefault() }, [lead.whatsapp + ' · ' + lead.email]),
-        el('div', { class: 'sysmgr-row-badges' }, [statusBadge, sourceBadge, step2Badge]),
+        el('div', { class: 'sysmgr-row-badges' }, [statusBadge, sourceBadge, sellerBadge, step2Badge]),
       ]),
       el('div', { class: 'sysmgr-row-main-actions' }, [viewBtn]),
     ]);
@@ -2329,6 +2336,42 @@
     }
   }
 
+  function leadAssignedSeller(lead) {
+    const sellerId = Number(lead && lead.assigned_seller_id);
+    if (!sellerId) return null;
+    return (state.leadSellers || []).find((seller) => Number(seller.id) === sellerId) || null;
+  }
+
+  function buildLeadSellerSelect(lead) {
+    const currentSellerId = Number(lead && lead.assigned_seller_id) || 0;
+    const options = [el('option', { value: '' }, ['Sem vendedor vinculado'])];
+    (state.leadSellers || []).forEach((seller) => {
+      const isCurrent = Number(seller.id) === currentSellerId;
+      options.push(el('option', {
+        value: String(seller.id),
+        selected: isCurrent ? true : null,
+        disabled: !seller.is_active && !isCurrent ? true : null,
+      }, [seller.name + (seller.is_active ? '' : ' (inativo)')]));
+    });
+    return el('select', { 'aria-label': 'Vendedor responsável pela tratativa' }, options);
+  }
+
+  async function updateLeadSeller(lead, selectedValue) {
+    const assignedSellerId = selectedValue ? Number(selectedValue) : null;
+    try {
+      const { lead: updated } = await api('/leads/' + lead.id, {
+        method: 'PUT', body: { assigned_seller_id: assignedSellerId },
+      });
+      state.leads = (state.leads || []).map((item) => item.id === updated.id ? updated : item);
+      if (state.leadModal && state.leadModal.lead.id === updated.id) state.leadModal.lead = updated;
+      render();
+      toast(assignedSellerId ? 'Vendedor vinculado ao lead.' : 'Vínculo com vendedor removido.');
+    } catch (err) {
+      toast(err.message, true);
+      render();
+    }
+  }
+
   async function deleteLead(lead) {
     if (!window.confirm('Excluir o lead "' + lead.name + '"? Essa ação não pode ser desfeita.')) return;
     try {
@@ -2350,6 +2393,9 @@
       el('option', { value: st, selected: st === lead.status ? 'selected' : null }, [LEAD_STATUS_LABELS[st]])
     ));
     statusSelect.addEventListener('change', () => updateLeadStatus(lead, statusSelect.value));
+    const sellerSelect = buildLeadSellerSelect(lead);
+    sellerSelect.addEventListener('change', () => updateLeadSeller(lead, sellerSelect.value));
+    const assignedSeller = leadAssignedSeller(lead);
 
     const grid = el('div', { class: 'view-modal-grid' }, [
       viewField('Nome completo', lead.name),
@@ -2363,6 +2409,9 @@
       viewField('Instagram', lead.instagram_url || '—'),
       viewField('Responsável pelo negócio', lead.responsible_name || '—'),
       viewFieldWhatsApp('Contato do responsável', lead.responsible_contact || '—'),
+      viewField('Vendedor responsável', assignedSeller
+        ? assignedSeller.name + ' · ' + assignedSeller.email + (assignedSeller.is_active ? '' : ' (inativo)')
+        : 'Não vinculado'),
       viewField('Etapa preenchida', lead.step_completed >= 2 ? 'Etapa 1 e 2' : 'Apenas etapa 1'),
       viewField('Recebido em', formatDateBR(lead.created_at)),
     ]);
@@ -2373,9 +2422,9 @@
         el('div', { class: 'field-section-title' }, ['Necessidade descrita']),
         el('p', { class: 'view-description' }, [lead.description]),
       ]) : null,
-      el('div', { class: 'field', style: 'margin-top:18px;max-width:240px;' }, [
-        el('label', {}, ['Status']),
-        statusSelect,
+      el('div', { class: 'lead-assignment-controls' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['Status']), statusSelect]),
+        el('div', { class: 'field' }, [el('label', {}, ['Vendedor em tratativa']), sellerSelect]),
       ]),
     ]);
 
@@ -2405,6 +2454,7 @@
       type: 'text', maxlength: '1000', value: (lead.services || []).join(', '),
       placeholder: 'Ex.: Website, Landing Page',
     });
+    const sellerSelect = buildLeadSellerSelect(lead);
     const fields = {
       name: el('input', { type: 'text', maxlength: '200', value: lead.name || '' }),
       whatsapp: el('input', { type: 'text', maxlength: '40', value: lead.whatsapp || '' }),
@@ -2414,6 +2464,7 @@
       instagramUrl: el('input', { type: 'text', maxlength: '2000', value: lead.instagram_url || '' }),
       responsibleName: el('input', { type: 'text', maxlength: '200', value: lead.responsible_name || '' }),
       responsibleContact: el('input', { type: 'text', maxlength: '200', value: lead.responsible_contact || '' }),
+      assignedSeller: sellerSelect,
       status: el('select', {}, LEAD_STATUS_ORDER.map((status) => el('option', {
         value: status, selected: status === lead.status ? true : null,
       }, [LEAD_STATUS_LABELS[status]]))),
@@ -2441,6 +2492,7 @@
             instagram_url: fields.instagramUrl.value.trim(),
             responsible_name: fields.responsibleName.value.trim(),
             responsible_contact: fields.responsibleContact.value.trim(),
+            assigned_seller_id: fields.assignedSeller.value ? Number(fields.assignedSeller.value) : null,
             status: fields.status.value,
           },
         });
@@ -2468,6 +2520,7 @@
           el('div', { class: 'field field-span-2' }, [el('label', {}, ['Serviços desejados']), servicesInput]),
           el('div', { class: 'field' }, [el('label', {}, ['Link do Instagram']), fields.instagramUrl]),
           el('div', { class: 'field' }, [el('label', {}, ['Status']), fields.status]),
+          el('div', { class: 'field field-span-2' }, [el('label', {}, ['Vendedor em tratativa']), fields.assignedSeller]),
           el('div', { class: 'field' }, [el('label', {}, ['Responsável pelo negócio']), fields.responsibleName]),
           el('div', { class: 'field' }, [el('label', {}, ['Contato do responsável']), fields.responsibleContact]),
           el('div', { class: 'field field-span-2' }, [el('label', {}, ['Descrição da necessidade']), fields.description]),

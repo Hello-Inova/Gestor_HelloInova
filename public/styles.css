@@ -2311,6 +2311,11 @@ button { font-family: inherit; }
 .lead-status-badge.status-em_contato { background: rgba(255, 191, 71, 0.14); color: #ffbf47; border-color: rgba(255, 191, 71, 0.35); }
 .lead-status-badge.status-convertido { background: rgba(47, 224, 160, 0.14); color: var(--success); border-color: rgba(47, 224, 160, 0.35); }
 .lead-status-badge.status-perdido { background: rgba(255, 84, 112, 0.12); color: var(--danger); border-color: rgba(255, 84, 112, 0.3); }
+.lead-assignment-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 240px)); gap: 16px; margin-top: 18px; }
+.lead-assignment-controls .field { margin-bottom: 0; }
+@media (max-width: 700px) {
+  .lead-assignment-controls { grid-template-columns: 1fr; }
+}
 
 .lead-import-card { max-width: 640px; }
 .lead-import-hint { align-items: flex-start; margin-bottom: 18px; }
